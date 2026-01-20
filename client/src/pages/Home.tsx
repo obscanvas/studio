@@ -12,37 +12,33 @@ import { ProjectConfig, DEFAULT_PROJECT_CONFIG, Layer } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Settings, Layers, RefreshCw } from 'lucide-react';
 
-const STORAGE_KEY = 'obs-web-studio-config';
-
 export default function Home() {
   const [config, setConfig] = useState<ProjectConfig>(DEFAULT_PROJECT_CONFIG);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
 
-  // Yapılandırmayı localStorage'dan yükle
-  const loadConfig = useCallback(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      try {
-        setConfig(JSON.parse(saved));
-      } catch {
-        console.error('Yapılandırma yüklenemedi');
+  // Yapılandırmayı sunucudan yükle
+  const loadConfig = useCallback(async () => {
+    try {
+      const response = await fetch('/api/config');
+      if (response.ok) {
+        const serverConfig = await response.json();
+        if (serverConfig) {
+          setConfig(serverConfig);
+        }
       }
+    } catch (error) {
+      console.error('Yapılandırma yüklenemedi:', error);
     }
   }, []);
 
-  // İlk yükleme ve storage değişikliklerini dinle
+  // İlk yükleme ve periyodik yenileme
   useEffect(() => {
     loadConfig();
 
-    // Storage değişikliklerini dinle (diğer sekmelerden)
-    const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
-        loadConfig();
-      }
-    };
+    // Her 2 saniyede bir sunucudan config'i kontrol et
+    const interval = setInterval(loadConfig, 2000);
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    return () => clearInterval(interval);
   }, [loadConfig]);
 
   // Pencere boyutunu takip et
@@ -60,7 +56,7 @@ export default function Home() {
   }, []);
 
   // Katmanları zIndex'e göre sırala
-  const sortedLayers = useMemo(() => 
+  const sortedLayers = useMemo(() =>
     [...config.layers].sort((a, b) => a.zIndex - b.zIndex),
     [config.layers]
   );
@@ -68,7 +64,7 @@ export default function Home() {
   // CSS filter string oluştur
   const getFilterStyle = (layer: Layer): React.CSSProperties => {
     const { filters } = layer;
-    
+
     if (!filters.visible) {
       return { display: 'none' };
     }
@@ -120,7 +116,7 @@ export default function Home() {
       for (let col = -tilesLeft; col <= tilesRight; col++) {
         const x = centerX + col * canvasW;
         const y = centerY + row * canvasH;
-        
+
         // Görünür alanda mı kontrol et
         if (x + canvasW > 0 && x < windowW && y + canvasH > 0 && y < windowH) {
           positions.push({
@@ -144,8 +140,8 @@ export default function Home() {
         height: config.canvasSize.height,
         backgroundColor: config.backgroundColor,
         // Ana tuval için hafif vurgu
-        boxShadow: isMain 
-          ? '0 0 0 2px rgba(0, 240, 255, 0.3), 0 0 40px rgba(0, 240, 255, 0.1)' 
+        boxShadow: isMain
+          ? '0 0 0 2px rgba(0, 240, 255, 0.3), 0 0 40px rgba(0, 240, 255, 0.1)'
           : 'none',
         // Tile'lar için hafif karartma
         opacity: isMain ? 1 : 0.7,
@@ -184,7 +180,7 @@ export default function Home() {
   );
 
   return (
-    <div 
+    <div
       className="fixed inset-0 overflow-hidden"
       style={{ backgroundColor: '#000' }}
     >
