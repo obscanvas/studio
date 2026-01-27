@@ -86,19 +86,21 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        // Bulutta yoksa veya ID yoksa yerel API'yi dene (Fallback)
-        const response = await fetch('/api/config');
-        if (response.ok) {
-          const serverConfig = await response.json();
-          if (serverConfig) {
-            const configWithDefaults = {
-              ...serverConfig,
-              layers: serverConfig.layers.map((layer: Layer) => ({
-                ...layer,
-                filters: { ...DEFAULT_FILTERS, ...layer.filters },
-              })),
-            };
-            setConfig(configWithDefaults);
+        // Bulutta yoksa veya ID yoksa yerel API'yi dene (Sadece localhost üzerinde)
+        if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+          const response = await fetch('/api/config');
+          if (response.ok) {
+            const serverConfig = await response.json();
+            if (serverConfig) {
+              const configWithDefaults = {
+                ...serverConfig,
+                layers: serverConfig.layers.map((layer: Layer) => ({
+                  ...layer,
+                  filters: { ...DEFAULT_FILTERS, ...layer.filters },
+                })),
+              };
+              setConfig(configWithDefaults);
+            }
           }
         }
       } catch (error) {
