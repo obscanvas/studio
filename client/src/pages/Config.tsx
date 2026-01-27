@@ -125,7 +125,8 @@ function ConfigContent() {
             </Button>
           </Link>
 
-          <div className="sm:hidden">
+          <div className="sm:hidden flex items-center gap-1">
+            <CanvasSettings />
             <ConfigActions />
           </div>
         </div>
