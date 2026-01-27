@@ -206,10 +206,16 @@ export default function Home() {
     </div>
   );
 
+  const [showControls, setShowControls] = useState(true);
+
+  // Dokunmatik cihaz kontrolü
+  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
+
   return (
     <div
       className="fixed inset-0 overflow-hidden"
       style={{ backgroundColor: '#000' }}
+      onClick={() => isTouchDevice && setShowControls(!showControls)}
     >
       {isLoading ? (
         <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-[100]">
@@ -233,22 +239,23 @@ export default function Home() {
           </div>
 
           {config.layers.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="text-center text-white/50">
-                <Layers className="w-16 h-16 mx-auto mb-4 opacity-30" />
-                <p className="text-lg">Henüz katman eklenmemiş</p>
-                <p className="text-sm mt-2">Config sayfasından katman ekleyin</p>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center text-white/30 px-6">
+                <Layers className="w-12 h-12 md:w-16 md:h-16 mx-auto mb-4 opacity-20" />
+                <p className="text-sm md:text-lg">Henüz katman eklenmemiş</p>
+                <p className="text-xs md:text-sm mt-2 opacity-60">Config sayfasından katman ekleyin</p>
               </div>
             </div>
           )}
 
-          <div className="fixed top-4 right-4 opacity-0 hover:opacity-100 transition-opacity duration-300 z-50">
-            <div className="cyber-panel p-3 bg-card/90 backdrop-blur-sm flex items-center gap-2">
+          {/* Top Controls Bar */}
+          <div className={`fixed top-4 right-4 transition-all duration-300 z-50 ${showControls || !isTouchDevice ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'} ${!isTouchDevice ? 'md:opacity-0 md:hover:opacity-100' : ''}`}>
+            <div className="cyber-panel p-2 md:p-3 bg-card/90 backdrop-blur-md flex items-center gap-2 border-primary/30 shadow-[0_0_20px_rgba(0,240,255,0.1)]">
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={loadConfig}
-                className="h-8 w-8 text-muted-foreground hover:text-primary"
+                onClick={(e) => { e.stopPropagation(); loadConfig(); }}
+                className="h-8 w-8 md:h-9 md:w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
                 title="Yenile"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -257,26 +264,31 @@ export default function Home() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                  title="Config Sayfası"
+                  onClick={(e) => e.stopPropagation()}
+                  className="h-8 w-8 md:h-9 md:w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
+                  title="Yapılandırma"
                 >
                   <Settings className="w-4 h-4" />
                 </Button>
               </Link>
-              <div className="text-xs font-tech text-muted-foreground pl-2 border-l border-primary/30">
+              <div className="text-[10px] md:text-xs font-tech text-primary/80 pl-2 border-l border-primary/30 ml-1">
                 {config.canvasSize.width}×{config.canvasSize.height}
               </div>
             </div>
           </div>
 
-          <div className="fixed bottom-4 left-4 opacity-0 hover:opacity-100 transition-opacity duration-300 z-50">
-            <div className="cyber-panel p-2 bg-card/90 backdrop-blur-sm text-xs font-tech text-muted-foreground">
+          {/* Bottom Status Bar */}
+          <div className={`fixed bottom-4 left-4 transition-all duration-300 z-50 ${showControls || !isTouchDevice ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'} ${!isTouchDevice ? 'md:opacity-0 md:hover:opacity-100' : ''}`}>
+            <div className="cyber-panel p-2 px-3 bg-card/90 backdrop-blur-md text-[9px] md:text-xs font-tech text-muted-foreground border-primary/20 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
               <div className="flex items-center gap-3">
-                <span>Katman: {config.layers.length}</span>
-                <span>|</span>
-                <span>Tile: {tilePositions.length}</span>
-                <span>|</span>
-                <span>{config.name}</span>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                  <span className="text-primary truncate max-w-[80px] md:max-w-none">{config.name}</span>
+                </div>
+                <span className="opacity-30">|</span>
+                <span>{config.layers.length} L</span>
+                <span className="hidden xs:inline opacity-30">|</span>
+                <span className="hidden xs:inline">{tilePositions.length} TILE</span>
               </div>
             </div>
           </div>

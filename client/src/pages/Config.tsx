@@ -20,7 +20,7 @@ import { Slider } from '@/components/ui/slider';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import {
-  Layers,
+  Layers as LayersIcon,
   Play,
   Grid3X3,
   ZoomIn,
@@ -28,26 +28,55 @@ import {
   Maximize,
   ExternalLink,
   BookOpen,
+  Settings as SettingsIcon,
+  Menu,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
 } from 'lucide-react';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '@/components/ui/tabs';
 
 function ConfigContent() {
   const { config } = useProject();
   const [isAddMediaOpen, setIsAddMediaOpen] = useState(false);
   const [previewScale, setPreviewScale] = useState(0.5);
   const [showGrid, setShowGrid] = useState(false);
+  const [activeTab, setActiveTab] = useState('preview');
 
   // Tuval boyutuna göre otomatik ölçek hesapla
   const calculateAutoScale = useCallback(() => {
-    // Önizleme alanı yaklaşık 800x600 varsayalım
-    const maxWidth = 800;
-    const maxHeight = 500;
-    const scaleX = maxWidth / config.canvasSize.width;
-    const scaleY = maxHeight / config.canvasSize.height;
+    // Mobil/Tablet ayrımı için window genişliğini kontrol et
+    const isMobile = window.innerWidth < 768;
+    const isTablet = window.innerWidth >= 768 && window.innerWidth < 1200;
+
+    // Alan hesaplama (sidebars + padding dikkate alınarak)
+    let availableWidth = window.innerWidth;
+    if (!isMobile) {
+      availableWidth -= 288; // Sol panel (w-72)
+      availableWidth -= 320; // Sağ panel (w-80)
+    }
+    availableWidth -= 48; // Paddingler
+
+    let availableHeight = window.innerHeight - 150; // Header + Toolbar + Footer
+
+    const scaleX = availableWidth / config.canvasSize.width;
+    const scaleY = availableHeight / config.canvasSize.height;
     return Math.min(scaleX, scaleY, 1);
   }, [config.canvasSize]);
 
   useEffect(() => {
-    setPreviewScale(calculateAutoScale());
+    const handleResize = () => {
+      setPreviewScale(calculateAutoScale());
+    };
+
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, [calculateAutoScale]);
 
   const handleZoomIn = () => {
@@ -63,159 +92,180 @@ function ConfigContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background cyber-grid">
-      {/* Header */}
-      <header className="h-14 border-b border-primary/30 bg-card/80 backdrop-blur-sm flex items-center justify-between px-4">
-        <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-background cyber-grid flex flex-col overflow-hidden">
+      {/* Header - Responsive */}
+      <header className="h-14 border-b border-primary/30 bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 shrink-0 z-50">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <Layers className="w-6 h-6 text-primary" />
-            <h1 className="font-display text-lg tracking-wider text-primary">
-              OBS WEB STUDIO
+            <LayersIcon className="w-5 h-5 md:w-6 md:h-6 text-primary" />
+            <h1 className="font-display text-sm md:text-lg tracking-wider text-primary truncate max-w-[120px] md:max-w-none">
+              OBS STUDIO
             </h1>
           </div>
-          <span className="text-xs font-tech text-muted-foreground px-2 py-1 bg-secondary rounded">
+          <span className="hidden xs:inline-block text-[10px] md:text-xs font-tech text-muted-foreground px-2 py-0.5 bg-secondary rounded border border-primary/20">
             CONFIG
           </span>
         </div>
 
-        <div className="flex items-center gap-3">
-          <CanvasSettings />
-          <ConfigActions />
-          <Link href="/docs">
-            <Button 
-              variant="outline"
-              size="sm"
-              className="border-primary/30 hover:border-primary hover:bg-primary/10"
-            >
-              <BookOpen className="w-4 h-4 mr-2" />
-              Docs
-            </Button>
-          </Link>
+        <div className="flex items-center gap-2 md:gap-3">
+          <div className="hidden sm:flex items-center gap-2">
+            <CanvasSettings />
+            <ConfigActions />
+          </div>
+
           <Link href="/">
-            <Button 
+            <Button
               variant="default"
               size="sm"
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 h-8 md:h-9 px-3"
             >
-              <Play className="w-4 h-4 mr-2" />
-              Ana Sayfayı Aç
-              <ExternalLink className="w-3 h-3 ml-2" />
+              <Play className="w-3.5 h-3.5 md:mr-2" />
+              <span className="hidden md:inline">Yayını Aç</span>
+              <ExternalLink className="w-3 h-3 ml-2 hidden xs:inline" />
             </Button>
           </Link>
+
+          <div className="sm:hidden">
+            <ConfigActions />
+          </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex h-[calc(100vh-3.5rem)]">
-        {/* Sol Panel - Katman Listesi */}
-        <aside className="w-72 border-r border-primary/30 bg-card/50">
+      {/* Main Content - Desktop & Mobile Divergence */}
+      <div className="flex flex-1 overflow-hidden relative">
+
+        {/* Sol Panel - Desktop-only sidebar */}
+        <aside className="hidden lg:block w-72 border-r border-primary/30 bg-card/40 overflow-hidden">
           <LayerList onAddLayer={() => setIsAddMediaOpen(true)} />
         </aside>
 
-        {/* Orta Alan - Önizleme */}
-        <main className="flex-1 flex flex-col">
-          {/* Önizleme Toolbar */}
-          <div className="h-12 border-b border-primary/30 bg-card/30 flex items-center justify-between px-4">
-            <div className="flex items-center gap-4">
-              <span className="text-xs font-tech text-muted-foreground">
-                {config.name}
-              </span>
-              <span className="text-xs font-tech text-primary">
-                {config.canvasSize.width} × {config.canvasSize.height}
-              </span>
+        {/* Orta Alan - Main Workspace */}
+        <main className="flex-1 flex flex-col overflow-hidden">
+
+          {/* Mobile Tabs - Only visible on small screens */}
+          <div className="lg:hidden bg-card/60 border-b border-primary/20 flex items-center justify-center p-1 shrink-0">
+            <div className="flex bg-secondary/30 rounded-lg p-0.5 w-full max-w-sm">
+              <button
+                onClick={() => setActiveTab('layers')}
+                className={`flex-1 flex items-center justify-center py-1.5 rounded-md text-[10px] font-display transition-all ${activeTab === 'layers' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground'}`}
+              >
+                <LayersIcon className="w-3.5 h-3.5 mr-1.5" />
+                KATMANLAR
+              </button>
+              <button
+                onClick={() => setActiveTab('preview')}
+                className={`flex-1 flex items-center justify-center py-1.5 rounded-md text-[10px] font-display transition-all ${activeTab === 'preview' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground'}`}
+              >
+                <Play className="w-3.5 h-3.5 mr-1.5" />
+                İZLE
+              </button>
+              <button
+                onClick={() => setActiveTab('filters')}
+                className={`flex-1 flex items-center justify-center py-1.5 rounded-md text-[10px] font-display transition-all ${activeTab === 'filters' ? 'bg-primary text-primary-foreground shadow-lg shadow-primary/20' : 'text-muted-foreground'}`}
+              >
+                <Filter className="w-3.5 h-3.5 mr-1.5" />
+                FİLTRE
+              </button>
+            </div>
+          </div>
+
+          <div className="flex-1 relative flex overflow-hidden">
+            {/* View Switching Logic for Mobile */}
+
+            {/* Layers View (Mobile Tab) */}
+            <div className={`absolute inset-0 z-10 bg-background lg:hidden transition-transform duration-300 ${activeTab === 'layers' ? 'translate-x-0' : '-translate-x-full'}`}>
+              <LayerList onAddLayer={() => setIsAddMediaOpen(true)} />
             </div>
 
-            <div className="flex items-center gap-4">
-              {/* Grid Toggle */}
-              <div className="flex items-center gap-2">
-                <Grid3X3 className="w-4 h-4 text-muted-foreground" />
-                <Switch
-                  checked={showGrid}
-                  onCheckedChange={setShowGrid}
-                  className="data-[state=checked]:bg-primary"
+            {/* Filters View (Mobile Tab) */}
+            <div className={`absolute inset-0 z-10 bg-background lg:hidden transition-transform duration-300 ${activeTab === 'filters' ? 'translate-x-0' : 'translate-x-full'}`}>
+              <FilterPanel />
+            </div>
+
+            {/* Preview Area (Always present in desktop, primary in mobile) */}
+            <div className="flex-1 flex flex-col overflow-hidden">
+              {/* Toolbar */}
+              <div className="h-10 md:h-12 border-b border-primary/20 bg-card/20 flex items-center justify-between px-3 md:px-4 shrink-0">
+                <div className="flex items-center gap-2 md:gap-4 overflow-hidden">
+                  <span className="text-[10px] md:text-xs font-tech text-muted-foreground truncate hidden xs:inline">
+                    {config.name}
+                  </span>
+                  <span className="text-[10px] md:text-xs font-tech text-primary bg-primary/10 px-1.5 py-0.5 rounded border border-primary/20">
+                    {config.canvasSize.width}×{config.canvasSize.height}
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-2 md:gap-4">
+                  <div className="hidden xs:flex items-center gap-2">
+                    <Grid3X3 className="w-3.5 h-3.5 text-muted-foreground" />
+                    <Switch
+                      checked={showGrid}
+                      onCheckedChange={setShowGrid}
+                      className="scale-75 data-[state=checked]:bg-primary"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-0.5 md:gap-2 bg-secondary/20 p-0.5 rounded-md border border-primary/10">
+                    <Button
+                      variant="ghost" size="icon" onClick={handleZoomOut}
+                      className="h-7 w-7 md:h-8 md:w-8 text-muted-foreground hover:text-primary"
+                    >
+                      <ZoomOut className="w-3.5 h-3.5" />
+                    </Button>
+                    <span className="text-[9px] md:text-xs font-tech text-muted-foreground w-8 md:w-10 text-center">
+                      {Math.round(previewScale * 100)}%
+                    </span>
+                    <Button
+                      variant="ghost" size="icon" onClick={handleZoomIn}
+                      className="h-7 w-7 md:h-8 md:w-8 text-muted-foreground hover:text-primary"
+                    >
+                      <ZoomIn className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost" size="icon" onClick={handleFitToScreen}
+                      className="h-7 w-7 md:h-8 md:w-8 text-muted-foreground hover:text-primary hidden sm:flex"
+                    >
+                      <Maximize className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Visualization Area */}
+              <div className="flex-1 overflow-auto bg-[#050508] relative scan-lines group">
+                <CanvasPreview
+                  scale={previewScale}
+                  showBorder={true}
+                  showGrid={showGrid}
                 />
               </div>
 
-              {/* Zoom Controls */}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleZoomOut}
-                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                >
-                  <ZoomOut className="w-4 h-4" />
-                </Button>
-                
-                <div className="w-24">
-                  <Slider
-                    value={[previewScale]}
-                    min={0.1}
-                    max={2}
-                    step={0.05}
-                    onValueChange={([v]) => setPreviewScale(v)}
-                    className="[&_[role=slider]]:bg-primary [&_[role=slider]]:border-primary"
-                  />
+              {/* Status Bar */}
+              <div className="h-7 border-t border-primary/20 bg-card/40 flex items-center justify-between px-3 text-[9px] md:text-xs font-tech text-muted-foreground shrink-0">
+                <div className="flex items-center gap-3 overflow-hidden">
+                  <span className="truncate">KATMAN: {config.layers.length}</span>
+                  <span className="hidden sm:inline opacity-30">|</span>
+                  <span className="hidden sm:inline truncate">GÜNCELLEME: {new Date(config.lastModified).toLocaleTimeString('tr-TR')}</span>
                 </div>
-                
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleZoomIn}
-                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                >
-                  <ZoomIn className="w-4 h-4" />
-                </Button>
-                
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleFitToScreen}
-                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                >
-                  <Maximize className="w-4 h-4" />
-                </Button>
-
-                <span className="text-xs font-tech text-muted-foreground w-12 text-right">
-                  {Math.round(previewScale * 100)}%
-                </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)] animate-pulse" />
+                  <span className="hidden xs:inline">LIVE SINK</span>
+                </div>
               </div>
-            </div>
-          </div>
-
-          {/* Önizleme Alanı */}
-          <div className="flex-1 overflow-auto bg-background/50 scan-lines">
-            <CanvasPreview 
-              scale={previewScale} 
-              showBorder={true}
-              showGrid={showGrid}
-            />
-          </div>
-
-          {/* Alt Bilgi Bar */}
-          <div className="h-8 border-t border-primary/30 bg-card/30 flex items-center justify-between px-4 text-xs font-tech text-muted-foreground">
-            <div className="flex items-center gap-4">
-              <span>Katman: {config.layers.length}</span>
-              <span>|</span>
-              <span>Son Güncelleme: {new Date(config.lastModified).toLocaleString('tr-TR')}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-              <span>Otomatik Kayıt Aktif</span>
             </div>
           </div>
         </main>
 
-        {/* Sağ Panel - Özellikler */}
-        <aside className="w-80 border-l border-primary/30 bg-card/50">
+        {/* Sağ Panel - Desktop-only sidebar */}
+        <aside className="hidden lg:block w-80 border-l border-primary/30 bg-card/40 overflow-hidden">
           <FilterPanel />
         </aside>
       </div>
 
       {/* Medya Ekleme Dialog */}
-      <AddMediaDialog 
-        open={isAddMediaOpen} 
-        onOpenChange={setIsAddMediaOpen} 
+      <AddMediaDialog
+        open={isAddMediaOpen}
+        onOpenChange={setIsAddMediaOpen}
       />
     </div>
   );
