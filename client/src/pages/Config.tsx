@@ -240,7 +240,7 @@ function ConfigContent() {
               </div>
 
               {/* Visualization Area */}
-              <div className="flex-1 overflow-auto bg-[#050508] relative scan-lines group">
+              <div className="flex-1 overflow-auto bg-[#050508] relative group">
                 <CanvasPreview
                   scale={previewScale}
                   showBorder={true}

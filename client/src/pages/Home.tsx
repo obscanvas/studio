@@ -150,19 +150,23 @@ export default function Home() {
         return (
           <div
             key={layer.id}
-            className="absolute inset-0 flex items-center justify-center"
+            className="absolute inset-0"
             style={{
               zIndex: layer.zIndex,
-              ...getFilterStyle(layer),
             }}
           >
-            {isScrolling ? (
-              <InfiniteScroll speedX={layer.filters.uvScrollX} speedY={layer.filters.uvScrollY}>
-                {content}
-              </InfiniteScroll>
-            ) : (
-              content
-            )}
+            <div
+              className="w-full h-full flex items-center justify-center"
+              style={getFilterStyle(layer)}
+            >
+              {isScrolling ? (
+                <InfiniteScroll speedX={layer.filters.uvScrollX} speedY={layer.filters.uvScrollY}>
+                  {content}
+                </InfiniteScroll>
+              ) : (
+                content
+              )}
+            </div>
           </div>
         );
       })}
