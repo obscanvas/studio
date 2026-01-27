@@ -26,6 +26,23 @@ export function InfiniteScroll({ children, speedX, speedY, className }: Infinite
             return;
         }
 
+        let width = 0;
+        let height = 0;
+
+        const updateDimensions = () => {
+            if (containerRef.current) {
+                width = containerRef.current.clientWidth;
+                height = containerRef.current.clientHeight;
+            }
+        };
+
+        updateDimensions();
+
+        const resizeObserver = new ResizeObserver(updateDimensions);
+        if (containerRef.current) {
+            resizeObserver.observe(containerRef.current);
+        }
+
         const animate = (time: number) => {
             if (!lastTimeRef.current) {
                 lastTimeRef.current = time;
@@ -37,26 +54,19 @@ export function InfiniteScroll({ children, speedX, speedY, className }: Infinite
             lastTimeRef.current = time;
 
             // Calculate new position based on constant time delta
-            // Multiplying by a factor (e.g., 50) to match user's expected "speed" feel from previous version
+            // Multiplying by a factor (e.g., 50) to match user's expected "speed" feel
             const velocity = 50;
             posRef.current.x += speedX * deltaTime * velocity;
             posRef.current.y += speedY * deltaTime * velocity;
 
-            if (contentRef.current) {
-                const { width, height } = contentRef.current.getBoundingClientRect();
+            if (contentRef.current && width > 0 && height > 0) {
+                // Wrap coordinates to stay within [0, width] and [0, height]
+                posRef.current.x = ((posRef.current.x % width) + width) % width;
+                posRef.current.y = ((posRef.current.y % height) + height) % height;
 
-                // Use half width/height because we are tiling 2x2 (the child is cloned)
-                // But since we use display: grid with 4 tiles, the contentRef size is the size of one tile
-                if (width > 0 && height > 0) {
-                    // Wrap coordinates to stay within [-width, 0] or [0, width]
-                    // The % operator in JS works with signs, so we ensure positive modulo
-                    posRef.current.x = ((posRef.current.x % width) + width) % width;
-                    posRef.current.y = ((posRef.current.y % height) + height) % height;
-
-                    // Apply transform3d for GPU acceleration (sub-pixel precision)
-                    // We translate backwards to create the scrolling forward effect
-                    contentRef.current.style.transform = `translate3d(${-posRef.current.x}px, ${-posRef.current.y}px, 0)`;
-                }
+                // Apply transform3d for GPU acceleration
+                // We translate backwards to create the scrolling forward effect
+                contentRef.current.style.transform = `translate3d(${-posRef.current.x}px, ${-posRef.current.y}px, 0)`;
             }
 
             animationRef.current = requestAnimationFrame(animate);
@@ -68,6 +78,7 @@ export function InfiniteScroll({ children, speedX, speedY, className }: Infinite
             if (animationRef.current) {
                 cancelAnimationFrame(animationRef.current);
             }
+            resizeObserver.disconnect();
             lastTimeRef.current = 0;
         };
     }, [speedX, speedY]);
@@ -79,7 +90,7 @@ export function InfiniteScroll({ children, speedX, speedY, className }: Infinite
         >
             <div
                 ref={contentRef}
-                className="absolute top-0 left-0 flex"
+                className="absolute top-0 left-0"
                 style={{
                     display: 'grid',
                     gridTemplateColumns: 'repeat(2, 100%)',
