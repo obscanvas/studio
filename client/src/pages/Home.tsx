@@ -58,7 +58,10 @@ export default function Home() {
 
   const loadConfig = useCallback(async () => {
     try {
-      const params = new URLSearchParams(window.location.search);
+      const search = window.location.hash.includes('?')
+        ? window.location.hash.split('?')[1]
+        : window.location.search.substring(1);
+      const params = new URLSearchParams(search);
       const id = params.get('id');
 
       if (id) {

@@ -104,3 +104,9 @@ temp/
 *.db
 *.sqlite
 *.sqlite3
+
+# Large assets and backups
+*.rar
+*.zip
+*.7z
+config.json

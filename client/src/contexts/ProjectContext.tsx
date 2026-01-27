@@ -56,7 +56,10 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   // URL'den proje ID'sini kontrol et
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const search = window.location.hash.includes('?')
+      ? window.location.hash.split('?')[1]
+      : window.location.search.substring(1);
+    const params = new URLSearchParams(search);
     const id = params.get('id');
     if (id) {
       setProjectId(id);
@@ -343,7 +346,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       // Mevcut ID varsa güncelle, yoksa yeni oluştur
       if (projectId) {
         await saveConfig();
-        return `${window.location.origin}${window.location.pathname}?id=${projectId}`;
+        return `${window.location.origin}${window.location.pathname}#/?id=${projectId}`;
       } else {
         const newId = Math.random().toString(36).substring(2, 10);
         const { error } = await supabase
@@ -357,8 +360,8 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         }
 
         setProjectId(newId);
-        window.history.pushState({}, '', `?id=${newId}`);
-        return `${window.location.origin}${window.location.pathname}?id=${newId}`;
+        window.location.hash = `/?id=${newId}`;
+        return `${window.location.origin}${window.location.pathname}#/?id=${newId}`;
       }
     } catch (e) {
       return null;
