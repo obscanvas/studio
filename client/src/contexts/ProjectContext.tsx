@@ -79,20 +79,31 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
     if (selectedLayerId === layerId) setSelectedLayerId(null);
   };
 
-  // URL'den proje ID'sini kontrol et
+  // URL'den proje ID'sini kontrol et ve yükle
   useEffect(() => {
-    const search = window.location.hash.includes('?')
-      ? window.location.hash.split('?')[1]
+    const hash = window.location.hash;
+    const isConfigPage = hash.includes('/config');
+
+    const search = hash.includes('?')
+      ? hash.split('?')[1]
       : window.location.search.substring(1);
     const params = new URLSearchParams(search);
     const id = params.get('id');
-    if (id) setProjectId(id);
-  }, []);
 
-  // İlk yüklemede config'i çek
-  useEffect(() => {
-    loadConfig();
-  }, [projectId, loadConfig]);
+    if (id) {
+      if (isConfigPage) {
+        // Düzeltme Modu: Sahneyi çek ama projectId setleme (üzerine yazmasın)
+        loadConfig(id);
+      } else {
+        // İzleme Modu: ID'yi sahiplen
+        setProjectId(id);
+      }
+    } else {
+      // ID yoksa son oturumu yükle
+      loadConfig();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Otomatik kaydetme (Debounced)
   useEffect(() => {
