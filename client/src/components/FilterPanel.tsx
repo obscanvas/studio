@@ -28,7 +28,22 @@ import {
   FlipVertical,
   Palette,
   Eye,
+  Plus,
+  Trash2,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 
 // Sayısal giriş bileşeni - Yazarken state güncellemelerinin araya girmesini engeller
 function NumberInput({
@@ -97,6 +112,7 @@ interface FilterSliderProps {
   max: number;
   step?: number;
   unit?: string;
+  disabled?: boolean;
   onChange: (value: number) => void;
 }
 
@@ -108,9 +124,10 @@ const FilterSlider = React.memo(({
   max,
   step = 1,
   unit = '',
+  disabled = false,
   onChange,
 }: FilterSliderProps) => (
-  <div className="space-y-2">
+  <div className={`space-y-2 ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
     <div className="flex items-center justify-between">
       <div className="flex items-center gap-2 text-sm">
         <Icon className="w-4 h-4 text-primary" />
@@ -138,6 +155,79 @@ const FilterSlider = React.memo(({
   </div>
 ));
 
+// Unity-like Filtre Section Bileşeni
+interface FilterSectionProps {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+  isPermanent?: boolean;
+  isEnabled: boolean;
+  onToggle?: (enabled: boolean) => void;
+  onRemove?: () => void;
+  children: React.ReactNode;
+}
+
+const FilterSection = ({
+  id,
+  label,
+  icon: Icon,
+  isPermanent = false,
+  isEnabled,
+  onToggle,
+  onRemove,
+  children,
+}: FilterSectionProps) => {
+  const [isOpen, setIsOpen] = React.useState(true);
+
+  return (
+    <Collapsible
+      open={isOpen}
+      onOpenChange={setIsOpen}
+      className="border border-primary/20 bg-card/20 rounded shadow-sm overflow-hidden"
+    >
+      <div className={`flex items-center gap-2 px-3 py-2 bg-secondary/30 ${!isEnabled ? 'opacity-60' : ''}`}>
+        <CollapsibleTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-5 w-5 p-0 hover:bg-primary/20">
+            {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+          </Button>
+        </CollapsibleTrigger>
+
+        <Icon className={`w-4 h-4 ${isEnabled ? 'text-primary' : 'text-muted-foreground'}`} />
+        <span className="flex-1 text-xs font-display uppercase tracking-wider truncate">
+          {label}
+        </span>
+
+        <div className="flex items-center gap-2">
+          {!isPermanent && (
+            <Switch
+              size="sm"
+              checked={isEnabled}
+              onCheckedChange={onToggle}
+              className="scale-75 h-4"
+            />
+          )}
+          {!isPermanent && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onRemove}
+              className="h-6 w-6 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+        </div>
+      </div>
+
+      <CollapsibleContent>
+        <div className={`p-4 space-y-4 border-t border-primary/10 ${!isEnabled ? 'bg-black/20 italic' : ''}`}>
+          {children}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
+};
+
 export function FilterPanel() {
   const { selectedLayer, updateLayerFilters, updateLayer } = useProject();
 
@@ -161,14 +251,44 @@ export function FilterPanel() {
   }
 
   const filters = selectedLayer.filters;
+  const activeFilters = filters.activeFilters || [];
+  const disabledFilters = filters.disabledFilters || [];
 
-  const handleFilterChange = (key: keyof typeof filters, value: number | boolean) => {
+  const handleFilterChange = (key: string, value: any) => {
     updateLayerFilters(selectedLayer.id, { [key]: value });
   };
 
-  const handleResetFilters = () => {
-    updateLayerFilters(selectedLayer.id, DEFAULT_FILTERS);
+  const toggleFilter = (filterId: string, enabled: boolean) => {
+    let newDisabled = [...disabledFilters];
+    if (enabled) {
+      newDisabled = newDisabled.filter(id => id !== filterId);
+    } else {
+      if (!newDisabled.includes(filterId)) newDisabled.push(filterId);
+    }
+    updateLayerFilters(selectedLayer.id, { disabledFilters: newDisabled });
   };
+
+  const addFilter = (filterId: string) => {
+    if (!activeFilters.includes(filterId)) {
+      updateLayerFilters(selectedLayer.id, {
+        activeFilters: [...activeFilters, filterId]
+      });
+    }
+  };
+
+  const removeFilter = (filterId: string) => {
+    updateLayerFilters(selectedLayer.id, {
+      activeFilters: activeFilters.filter(id => id !== filterId),
+      disabledFilters: disabledFilters.filter(id => id !== filterId)
+    });
+  };
+
+  const AVAILABLE_OPTIONS = [
+    { id: 'hueRotate', label: 'Renk Tonu', icon: Palette },
+    { id: 'colorAdjust', label: 'Renk Ayarı', icon: Sun },
+    { id: 'blur', label: 'Bulanıklık', icon: CircleDot },
+    { id: 'uvScroll', label: 'UV Kaydırma', icon: Move },
+  ];
 
   return (
     <div className="cyber-panel h-full flex flex-col overflow-hidden max-h-[calc(100vh-3.5rem)]">
@@ -177,96 +297,97 @@ export function FilterPanel() {
         <h2 className="font-display text-sm uppercase tracking-wider text-primary">
           Özellikler
         </h2>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleResetFilters}
-          className="h-7 px-2 text-muted-foreground hover:text-primary hover:bg-primary/20"
-        >
-          <RotateCcw className="w-3 h-3 mr-1" />
-          <span className="text-xs">Sıfırla</span>
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 px-2 border-primary/30 text-primary hover:bg-primary/20"
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" />
+              <span className="text-xs">Filtre Ekle</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48 bg-card/95 border-primary/30 backdrop-blur-sm">
+            {AVAILABLE_OPTIONS.map(opt => (
+              <DropdownMenuItem
+                key={opt.id}
+                onClick={() => addFilter(opt.id)}
+                disabled={activeFilters.includes(opt.id)}
+                className="flex items-center gap-2 cursor-pointer hover:bg-primary/20"
+              >
+                <opt.icon className="w-4 h-4 text-primary" />
+                <span className="text-xs">{opt.label}</span>
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <ScrollArea className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-6">
-          {/* Katman Adı */}
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-              Katman Adı
-            </Label>
-            <Input
-              value={selectedLayer.name}
-              onChange={(e) => updateLayer(selectedLayer.id, { name: e.target.value })}
-              className="bg-secondary border-primary/30 focus:border-primary"
-            />
-          </div>
-
-          <Separator className="bg-primary/20" />
-
-          {/* Görünürlük */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Eye className="w-4 h-4 text-primary" />
-              <span className="text-sm">Görünür</span>
-            </div>
-            <Switch
-              checked={filters.visible}
-              onCheckedChange={(v) => handleFilterChange('visible', v)}
-            />
-          </div>
-
-          <Separator className="bg-primary/20" />
-
-          {/* Opaklık */}
-          <FilterSlider
-            icon={Eye}
-            label="Opaklık"
-            value={filters.opacity}
-            min={0}
-            max={100}
-            unit="%"
-            onChange={(v) => handleFilterChange('opacity', v)}
-          />
-
-          <Separator className="bg-primary/20" />
-
-          {/* Konum */}
+          {/* Katman Temel Ayarları */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Move className="w-4 h-4 text-primary" />
-              <span>Konum</span>
+            <div className="space-y-2">
+              <Label className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                Katman İsmi
+              </Label>
+              <Input
+                value={selectedLayer.name}
+                onChange={(e) => updateLayer(selectedLayer.id, { name: e.target.value })}
+                className="bg-secondary/50 border-primary/20 focus:border-primary h-8 text-xs font-tech"
+              />
             </div>
+
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <Eye className="w-4 h-4 text-primary" />
+                <span className="text-xs font-display">GÖRÜNÜR</span>
+              </div>
+              <Switch
+                checked={filters.visible}
+                onCheckedChange={(v) => handleFilterChange('visible', v)}
+              />
+            </div>
+          </div>
+
+          <Separator className="bg-primary/20" />
+
+          {/* Transform Section - Permanent */}
+          <FilterSection
+            id="transform"
+            label="Dönüşüm (Transform)"
+            icon={Maximize2}
+            isPermanent={true}
+            isEnabled={true}
+          >
+            <FilterSlider
+              icon={Eye}
+              label="Opaklık"
+              value={filters.opacity}
+              min={0}
+              max={100}
+              unit="%"
+              onChange={(v) => handleFilterChange('opacity', v)}
+            />
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">X Offset</Label>
-                <Input
-                  type="number"
+                <Label className="text-[10px] text-muted-foreground">X KONUM</Label>
+                <NumberInput
                   value={filters.offsetX}
-                  onChange={(e) => handleFilterChange('offsetX', Number(e.target.value))}
-                  className="bg-secondary border-primary/30 focus:border-primary font-tech text-xs h-8"
+                  onChange={(v) => handleFilterChange('offsetX', v)}
+                  className="bg-secondary/50 border-primary/20 h-7 text-xs font-tech text-right"
                 />
               </div>
               <div className="space-y-1">
-                <Label className="text-xs text-muted-foreground">Y Offset</Label>
-                <Input
-                  type="number"
+                <Label className="text-[10px] text-muted-foreground">Y KONUM</Label>
+                <NumberInput
                   value={filters.offsetY}
-                  onChange={(e) => handleFilterChange('offsetY', Number(e.target.value))}
-                  className="bg-secondary border-primary/30 focus:border-primary font-tech text-xs h-8"
+                  onChange={(v) => handleFilterChange('offsetY', v)}
+                  className="bg-secondary/50 border-primary/20 h-7 text-xs font-tech text-right"
                 />
               </div>
-            </div>
-          </div>
-
-          <Separator className="bg-primary/20" />
-
-          {/* Dönüşüm */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Maximize2 className="w-4 h-4 text-primary" />
-              <span>Dönüşüm</span>
             </div>
 
             <FilterSlider
@@ -290,132 +411,164 @@ export function FilterPanel() {
               onChange={(v) => handleFilterChange('rotation', v)}
             />
 
-            {/* Çevirme */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 pt-1">
               <div className="flex items-center gap-2">
-                <FlipHorizontal className="w-4 h-4 text-primary" />
-                <span className="text-sm">Yatay</span>
+                <FlipHorizontal className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[10px]">YATAY</span>
                 <Switch
                   checked={filters.flipX}
                   onCheckedChange={(v) => handleFilterChange('flipX', v)}
+                  className="scale-75"
                 />
               </div>
               <div className="flex items-center gap-2">
-                <FlipVertical className="w-4 h-4 text-primary" />
-                <span className="text-sm">Dikey</span>
+                <FlipVertical className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[10px]">DİKEY</span>
                 <Switch
                   checked={filters.flipY}
                   onCheckedChange={(v) => handleFilterChange('flipY', v)}
+                  className="scale-75"
                 />
               </div>
             </div>
-          </div>
+          </FilterSection>
 
-          <Separator className="bg-primary/20" />
-
-          {/* Renk Ayarları */}
+          {/* DYNAMIC FILTERS */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Palette className="w-4 h-4 text-primary" />
-              <span>Renk Ayarları</span>
-            </div>
+            <h3 className="text-[10px] font-display text-muted-foreground tracking-widest uppercase px-1">
+              Eklenmiş Filtreler
+            </h3>
 
-            <FilterSlider
-              icon={Palette}
-              label="Renk Tonu"
-              value={filters.hueRotate}
-              min={0}
-              max={360}
-              unit="°"
-              onChange={(v) => handleFilterChange('hueRotate', v)}
-            />
+            {activeFilters.length === 0 && (
+              <div className="text-center py-6 border border-dashed border-primary/10 rounded bg-card/10">
+                <p className="text-[10px] text-muted-foreground italic">Henüz filtre eklenmedi</p>
+                <p className="text-[9px] text-primary/40">Yukarıdaki "+" butonunu kullanın</p>
+              </div>
+            )}
 
-            <FilterSlider
-              icon={Sun}
-              label="Parlaklık"
-              value={filters.brightness}
-              min={0}
-              max={200}
-              unit="%"
-              onChange={(v) => handleFilterChange('brightness', v)}
-            />
+            {activeFilters.includes('hueRotate') && (
+              <FilterSection
+                id="hueRotate"
+                label="Renk Tonu Kaydırma"
+                icon={Palette}
+                isEnabled={!disabledFilters.includes('hueRotate')}
+                onToggle={(v) => toggleFilter('hueRotate', v)}
+                onRemove={() => removeFilter('hueRotate')}
+              >
+                <FilterSlider
+                  icon={Palette}
+                  label="Ton"
+                  value={filters.hueRotate}
+                  min={0}
+                  max={360}
+                  unit="°"
+                  disabled={disabledFilters.includes('hueRotate')}
+                  onChange={(v) => handleFilterChange('hueRotate', v)}
+                />
+              </FilterSection>
+            )}
 
-            <FilterSlider
-              icon={Contrast}
-              label="Kontrast"
-              value={filters.contrast}
-              min={0}
-              max={200}
-              unit="%"
-              onChange={(v) => handleFilterChange('contrast', v)}
-            />
+            {activeFilters.includes('colorAdjust') && (
+              <FilterSection
+                id="colorAdjust"
+                label="Renk Ayarları"
+                icon={Sun}
+                isEnabled={!disabledFilters.includes('colorAdjust')}
+                onToggle={(v) => toggleFilter('colorAdjust', v)}
+                onRemove={() => removeFilter('colorAdjust')}
+              >
+                <FilterSlider
+                  icon={Sun}
+                  label="Parlaklık"
+                  value={filters.brightness}
+                  min={0}
+                  max={200}
+                  unit="%"
+                  disabled={disabledFilters.includes('colorAdjust')}
+                  onChange={(v) => handleFilterChange('brightness', v)}
+                />
+                <FilterSlider
+                  icon={Contrast}
+                  label="Kontrast"
+                  value={filters.contrast}
+                  min={0}
+                  max={200}
+                  unit="%"
+                  disabled={disabledFilters.includes('colorAdjust')}
+                  onChange={(v) => handleFilterChange('contrast', v)}
+                />
+                <FilterSlider
+                  icon={Droplets}
+                  label="Doygunluk"
+                  value={filters.saturate}
+                  min={0}
+                  max={200}
+                  unit="%"
+                  disabled={disabledFilters.includes('colorAdjust')}
+                  onChange={(v) => handleFilterChange('saturate', v)}
+                />
+              </FilterSection>
+            )}
 
-            <FilterSlider
-              icon={Droplets}
-              label="Doygunluk"
-              value={filters.saturate}
-              min={0}
-              max={200}
-              unit="%"
-              onChange={(v) => handleFilterChange('saturate', v)}
-            />
-          </div>
+            {activeFilters.includes('blur') && (
+              <FilterSection
+                id="blur"
+                label="Bulanıklık"
+                icon={CircleDot}
+                isEnabled={!disabledFilters.includes('blur')}
+                onToggle={(v) => toggleFilter('blur', v)}
+                onRemove={() => removeFilter('blur')}
+              >
+                <FilterSlider
+                  icon={CircleDot}
+                  label="Yarıçap"
+                  value={filters.blur}
+                  min={0}
+                  max={20}
+                  unit="px"
+                  disabled={disabledFilters.includes('blur')}
+                  onChange={(v) => handleFilterChange('blur', v)}
+                />
+              </FilterSection>
+            )}
 
-          <Separator className="bg-primary/20" />
-
-          {/* Efektler */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <CircleDot className="w-4 h-4 text-primary" />
-              <span>Efektler</span>
-            </div>
-
-            <FilterSlider
-              icon={CircleDot} label="Bulanıklık"
-              value={filters.blur}
-              min={0}
-              max={20}
-              unit="px"
-              onChange={(v) => handleFilterChange('blur', v)}
-            />
-          </div>
-
-          <Separator className="bg-primary/20" />
-
-          {/* UV Scroll */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-sm font-medium">
-              <Move className="w-4 h-4 text-primary" />
-              <span>UV Kaydırma (Hız)</span>
-            </div>
-
-            <div className="space-y-6">
-              <FilterSlider
+            {activeFilters.includes('uvScroll') && (
+              <FilterSection
+                id="uvScroll"
+                label="UV Kaydırma (Efect)"
                 icon={Move}
-                label="X Hızı"
-                value={filters.uvScrollX}
-                min={-10}
-                max={10}
-                step={0.1}
-                onChange={(v) => handleFilterChange('uvScrollX', v)}
-              />
-
-              <FilterSlider
-                icon={Move}
-                label="Y Hızı"
-                value={filters.uvScrollY}
-                min={-10}
-                max={10}
-                step={0.1}
-                onChange={(v) => handleFilterChange('uvScrollY', v)}
-              />
-            </div>
+                isEnabled={!disabledFilters.includes('uvScroll')}
+                onToggle={(v) => toggleFilter('uvScroll', v)}
+                onRemove={() => removeFilter('uvScroll')}
+              >
+                <FilterSlider
+                  icon={Move}
+                  label="Yatay Hız"
+                  value={filters.uvScrollX}
+                  min={-10}
+                  max={10}
+                  step={0.1}
+                  disabled={disabledFilters.includes('uvScroll')}
+                  onChange={(v) => handleFilterChange('uvScrollX', v)}
+                />
+                <FilterSlider
+                  icon={Move}
+                  label="Dikey Hız"
+                  value={filters.uvScrollY}
+                  min={-10}
+                  max={10}
+                  step={0.1}
+                  disabled={disabledFilters.includes('uvScroll')}
+                  onChange={(v) => handleFilterChange('uvScrollY', v)}
+                />
+              </FilterSection>
+            )}
           </div>
         </div>
       </ScrollArea>
 
       {/* Alt Bilgi */}
-      <div className="p-2 border-t border-primary/30 text-xs text-muted-foreground text-center font-tech shrink-0">
+      <div className="p-2 border-t border-primary/30 text-[10px] text-muted-foreground text-center font-tech shrink-0 bg-background/50">
         {selectedLayer.type.toUpperCase()} • {selectedLayer.id.slice(-8)}
       </div>
     </div>

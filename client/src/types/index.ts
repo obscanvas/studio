@@ -40,6 +40,10 @@ export interface LayerFilters {
   uvScrollY: number;
   /** Görünürlük */
   visible: boolean;
+  /** Aktif/Eklenmiş filtrelerin listesi (Unity-like) */
+  activeFilters: string[];
+  /** Devre dışı bırakılmış (kapatılmış) filtrelerin listesi */
+  disabledFilters: string[];
 }
 
 /**
@@ -111,6 +115,8 @@ export const DEFAULT_FILTERS: LayerFilters = {
   uvScrollX: 0,
   uvScrollY: 0,
   visible: true,
+  activeFilters: [], // Başlangıçta sadece temel özellikler (Transform) var
+  disabledFilters: [],
 };
 
 /**

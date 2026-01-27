@@ -79,18 +79,23 @@ export default function Home() {
 
   const getFilterStyle = (layer: Layer): React.CSSProperties => {
     const { filters } = layer;
+    const activeFilters = filters.activeFilters || [];
+    const disabledFilters = filters.disabledFilters || [];
 
     if (!filters.visible) {
       return { display: 'none' };
     }
 
+    // Filtre yardımcı fonksiyonu
+    const isFilterActive = (id: string) => activeFilters.includes(id) && !disabledFilters.includes(id);
+
     const filterString = [
       `opacity(${filters.opacity / 100})`,
-      `hue-rotate(${filters.hueRotate}deg)`,
-      `brightness(${filters.brightness / 100})`,
-      `contrast(${filters.contrast / 100})`,
-      `saturate(${filters.saturate / 100})`,
-      filters.blur > 0 ? `blur(${filters.blur}px)` : '',
+      isFilterActive('hueRotate') ? `hue-rotate(${filters.hueRotate}deg)` : '',
+      isFilterActive('colorAdjust') ? `brightness(${filters.brightness / 100})` : '',
+      isFilterActive('colorAdjust') ? `contrast(${filters.contrast / 100})` : '',
+      isFilterActive('colorAdjust') ? `saturate(${filters.saturate / 100})` : '',
+      (isFilterActive('blur') && filters.blur > 0) ? `blur(${filters.blur}px)` : '',
     ].filter(Boolean).join(' ');
 
     const transformString = [
@@ -156,7 +161,10 @@ export default function Home() {
       }}
     >
       {sortedLayers.map((layer) => {
-        const isScrolling = layer.filters.uvScrollX !== 0 || layer.filters.uvScrollY !== 0;
+        const activeFilters = layer.filters.activeFilters || [];
+        const disabledFilters = layer.filters.disabledFilters || [];
+        const isUVActive = activeFilters.includes('uvScroll') && !disabledFilters.includes('uvScroll');
+        const isScrolling = isUVActive && (layer.filters.uvScrollX !== 0 || layer.filters.uvScrollY !== 0);
 
         const content = layer.type === 'video' ? (
           <video
