@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Link } from 'wouter';
 import { ProjectConfig, DEFAULT_PROJECT_CONFIG, Layer } from '@/types';
-import { Button } from '@/components/ui/button';
-import { Settings, Layers, RefreshCw } from 'lucide-react';
+import { Layers, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 import { InfiniteScroll } from '@/components/ui/InfiniteScroll';
@@ -171,16 +169,10 @@ export default function Home() {
     </div>
   );
 
-  const [showControls, setShowControls] = useState(true);
-
-  // Dokunmatik cihaz kontrolü
-  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-
   return (
     <div
       className="fixed inset-0 overflow-hidden"
       style={{ backgroundColor: '#000' }}
-      onClick={() => isTouchDevice && setShowControls(!showControls)}
     >
       {isLoading ? (
         <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-[100]">
@@ -213,50 +205,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Top Controls Bar */}
-          <div className={`fixed top-4 right-4 transition-all duration-300 z-50 ${showControls || !isTouchDevice ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-4 pointer-events-none'} ${!isTouchDevice ? 'md:opacity-0 md:hover:opacity-100' : ''}`}>
-            <div className="cyber-panel p-2 md:p-3 bg-card/90 backdrop-blur-md flex items-center gap-2 border-primary/30 shadow-[0_0_20px_rgba(0,240,255,0.1)]">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={(e) => { e.stopPropagation(); loadConfig(); }}
-                className="h-8 w-8 md:h-9 md:w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                title="Yenile"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </Button>
-              <Link href="/config">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={(e) => e.stopPropagation()}
-                  className="h-8 w-8 md:h-9 md:w-9 text-muted-foreground hover:text-primary hover:bg-primary/10"
-                  title="Yapılandırma"
-                >
-                  <Settings className="w-4 h-4" />
-                </Button>
-              </Link>
-              <div className="text-[10px] md:text-xs font-tech text-primary/80 pl-2 border-l border-primary/30 ml-1">
-                {config.canvasSize.width}×{config.canvasSize.height}
-              </div>
-            </div>
-          </div>
 
-          {/* Bottom Status Bar */}
-          <div className={`fixed bottom-4 left-4 transition-all duration-300 z-50 ${showControls || !isTouchDevice ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'} ${!isTouchDevice ? 'md:opacity-0 md:hover:opacity-100' : ''}`}>
-            <div className="cyber-panel p-2 px-3 bg-card/90 backdrop-blur-md text-[9px] md:text-xs font-tech text-muted-foreground border-primary/20 shadow-[0_0_15px_rgba(0,0,0,0.5)]">
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-                  <span className="text-primary truncate max-w-[80px] md:max-w-none">{config.name}</span>
-                </div>
-                <span className="opacity-30">|</span>
-                <span>{config.layers.length} L</span>
-                <span className="hidden xs:inline opacity-30">|</span>
-                <span className="hidden xs:inline">{tilePositions.length} TILE</span>
-              </div>
-            </div>
-          </div>
         </>
       )}
     </div>
