@@ -78,12 +78,14 @@ export default function Home() {
         }
       }
 
-      // Fallback: Local API
-      const response = await fetch('/api/config');
-      if (response.ok) {
-        const serverConfig = await response.json();
-        if (serverConfig) {
-          setConfig(serverConfig);
+      // Fallback: Local API (Sadece localhost üzerinde deniyoruz)
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const serverConfig = await response.json();
+          if (serverConfig) {
+            setConfig(serverConfig);
+          }
         }
       }
     } catch (error) {
