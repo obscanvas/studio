@@ -300,6 +300,19 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
       if (error) toast.error('Bulut kaydı başarısız oldu');
     }
+
+    // Yerel sunucuya kaydetmeyi dene (Sadece local development'ta)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      try {
+        await fetch('/api/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config),
+        });
+      } catch (e) {
+        // Local server hatası - Sessizce geçiyoruz
+      }
+    }
   }, [config, projectId]);
 
   const loadConfig = useCallback(async () => {
@@ -310,8 +323,30 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
         .eq('id', projectId)
         .single();
 
-      if (data && !error) setConfig(data.config);
+      if (data && !error) {
+        setConfig(data.config);
+        setIsLoading(false);
+        return;
+      }
     }
+
+    // Local server'dan yüklemeyi dene (Sadece localhost üzerinde)
+    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+      try {
+        const response = await fetch('/api/config');
+        if (response.ok) {
+          const serverConfig = await response.json();
+          if (serverConfig) {
+            setConfig(serverConfig);
+            setIsLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        // Local server hatası - Sessizce geçiyoruz
+      }
+    }
+    setIsLoading(false);
   }, [projectId]);
 
   const resetConfig = useCallback(async () => {
