@@ -42,7 +42,7 @@ export function CanvasPreview({
   const scaledHeight = canvasSize.height * scale;
 
   return (
-    <div className="relative flex items-center justify-center w-full h-full p-4">
+    <div className="relative flex items-center justify-center w-full h-full">
       {/* Tuval Container */}
       {/* Tuval Container - Layout için yer tutucu */}
       <div

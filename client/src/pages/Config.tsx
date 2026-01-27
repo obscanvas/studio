@@ -53,8 +53,8 @@ function ConfigContent() {
   const calculateAutoScale = useCallback((width: number, height: number) => {
     if (width === 0 || height === 0) return 0.5;
 
-    const scaleX = (width - 48) / config.canvasSize.width; // 48px padding payı
-    const scaleY = (height - 48) / config.canvasSize.height;
+    const scaleX = width / config.canvasSize.width;
+    const scaleY = height / config.canvasSize.height;
     return Math.min(scaleX, scaleY, 1);
   }, [config.canvasSize]);
 
@@ -88,7 +88,7 @@ function ConfigContent() {
   };
 
   return (
-    <div className="min-h-screen bg-background cyber-grid flex flex-col overflow-hidden">
+    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       {/* Header - Responsive */}
       <header className="h-14 border-b border-primary/30 bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 shrink-0 z-50 overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-3 shrink-0">
@@ -238,7 +238,7 @@ function ConfigContent() {
               {/* Visualization Area */}
               <div
                 ref={vizContainerRef}
-                className="flex-1 overflow-auto bg-[#050508] relative group"
+                className="flex-1 overflow-hidden bg-[#050508] relative group"
               >
                 <CanvasPreview
                   scale={previewScale}
