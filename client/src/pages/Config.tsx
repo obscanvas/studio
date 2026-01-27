@@ -6,7 +6,7 @@
  * Sol: Katman listesi | Orta: Önizleme | Sağ: Özellikler
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Link } from 'wouter';
 import { ProjectProvider, useProject } from '@/contexts/ProjectContext';
 import { LayerList } from '@/components/LayerList';
@@ -47,36 +47,29 @@ function ConfigContent() {
   const [previewScale, setPreviewScale] = useState(0.5);
   const [showGrid, setShowGrid] = useState(false);
   const [activeTab, setActiveTab] = useState('preview');
+  const vizContainerRef = useRef<HTMLDivElement>(null);
 
   // Tuval boyutuna göre otomatik ölçek hesapla
-  const calculateAutoScale = useCallback(() => {
-    // Mobil/Tablet ayrımı için window genişliğini kontrol et
-    const isMobile = window.innerWidth < 768;
-    const isTablet = window.innerWidth >= 768 && window.innerWidth < 1200;
+  const calculateAutoScale = useCallback((width: number, height: number) => {
+    if (width === 0 || height === 0) return 0.5;
 
-    // Alan hesaplama (sidebars + padding dikkate alınarak)
-    let availableWidth = window.innerWidth;
-    if (!isMobile) {
-      availableWidth -= 288; // Sol panel (w-72)
-      availableWidth -= 320; // Sağ panel (w-80)
-    }
-    availableWidth -= 48; // Paddingler
-
-    let availableHeight = window.innerHeight - 150; // Header + Toolbar + Footer
-
-    const scaleX = availableWidth / config.canvasSize.width;
-    const scaleY = availableHeight / config.canvasSize.height;
+    const scaleX = (width - 48) / config.canvasSize.width; // 48px padding payı
+    const scaleY = (height - 48) / config.canvasSize.height;
     return Math.min(scaleX, scaleY, 1);
   }, [config.canvasSize]);
 
   useEffect(() => {
-    const handleResize = () => {
-      setPreviewScale(calculateAutoScale());
-    };
+    if (!vizContainerRef.current) return;
 
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const { width, height } = entry.contentRect;
+        setPreviewScale(calculateAutoScale(width, height));
+      }
+    });
+
+    observer.observe(vizContainerRef.current);
+    return () => observer.disconnect();
   }, [calculateAutoScale]);
 
   const handleZoomIn = () => {
@@ -88,7 +81,10 @@ function ConfigContent() {
   };
 
   const handleFitToScreen = () => {
-    setPreviewScale(calculateAutoScale());
+    if (vizContainerRef.current) {
+      const { width, height } = vizContainerRef.current.getBoundingClientRect();
+      setPreviewScale(calculateAutoScale(width, height));
+    }
   };
 
   return (
@@ -240,7 +236,10 @@ function ConfigContent() {
               </div>
 
               {/* Visualization Area */}
-              <div className="flex-1 overflow-auto bg-[#050508] relative group">
+              <div
+                ref={vizContainerRef}
+                className="flex-1 overflow-auto bg-[#050508] relative group"
+              >
                 <CanvasPreview
                   scale={previewScale}
                   showBorder={true}
