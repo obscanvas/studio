@@ -171,9 +171,9 @@ export function FilterPanel() {
   };
 
   return (
-    <div className="cyber-panel h-full flex flex-col">
+    <div className="cyber-panel h-full flex flex-col overflow-hidden max-h-[calc(100vh-3.5rem)]">
       {/* Panel Başlığı */}
-      <div className="p-3 border-b border-primary/30 flex items-center justify-between">
+      <div className="p-3 border-b border-primary/30 flex items-center justify-between shrink-0">
         <h2 className="font-display text-sm uppercase tracking-wider text-primary">
           Özellikler
         </h2>
@@ -188,7 +188,7 @@ export function FilterPanel() {
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-6">
           {/* Katman Adı */}
           <div className="space-y-2">
@@ -245,7 +245,7 @@ export function FilterPanel() {
                   type="number"
                   value={filters.offsetX}
                   onChange={(e) => handleFilterChange('offsetX', Number(e.target.value))}
-                  className="bg-secondary border-primary/30 focus:border-primary font-tech"
+                  className="bg-secondary border-primary/30 focus:border-primary font-tech text-xs h-8"
                 />
               </div>
               <div className="space-y-1">
@@ -254,7 +254,7 @@ export function FilterPanel() {
                   type="number"
                   value={filters.offsetY}
                   onChange={(e) => handleFilterChange('offsetY', Number(e.target.value))}
-                  className="bg-secondary border-primary/30 focus:border-primary font-tech"
+                  className="bg-secondary border-primary/30 focus:border-primary font-tech text-xs h-8"
                 />
               </div>
             </div>
@@ -415,7 +415,7 @@ export function FilterPanel() {
       </ScrollArea>
 
       {/* Alt Bilgi */}
-      <div className="p-2 border-t border-primary/30 text-xs text-muted-foreground text-center font-tech">
+      <div className="p-2 border-t border-primary/30 text-xs text-muted-foreground text-center font-tech shrink-0">
         {selectedLayer.type.toUpperCase()} • {selectedLayer.id.slice(-8)}
       </div>
     </div>
