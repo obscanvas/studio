@@ -11,6 +11,7 @@ import { Layer } from '@/types';
 
 import { InfiniteScroll } from '@/components/ui/InfiniteScroll';
 import { getFilterStyle } from '@/lib/renderUtils';
+import { TransformControls } from './TransformControls';
 
 // UVScrollLayer removed in favor of InfiniteScroll
 
@@ -28,7 +29,7 @@ export function CanvasPreview({
   showBorder = true,
   showGrid = false
 }: CanvasPreviewProps) {
-  const { config, selectedLayerId } = useProject();
+  const { config, selectedLayerId, updateLayerFilters, setSelectedLayerId } = useProject();
   const { canvasSize, backgroundColor, layers } = config;
 
   // Katmanları zIndex'e göre sırala
@@ -51,6 +52,7 @@ export function CanvasPreview({
           height: scaledHeight,
         }}
         className="relative"
+        onMouseDown={() => setSelectedLayerId(null)}
       >
         {/* Gerçek Tuval - CSS Scale ile küçültülmüş */}
         <div
@@ -64,6 +66,8 @@ export function CanvasPreview({
               ? '0 0 0 2px rgba(0, 240, 255, 0.5), 0 0 30px rgba(0, 240, 255, 0.2)'
               : 'none',
           }}
+          // Boş alana tıklayınca seçimi kaldır
+          onMouseDown={() => setSelectedLayerId(null)}
         >
           {/* Grid Overlay */}
           {showGrid && (
@@ -101,33 +105,52 @@ export function CanvasPreview({
             return (
               <div
                 key={layer.id}
-                className="absolute inset-0"
+                className="absolute inset-0 flex items-center justify-center pointer-events-none"
                 style={{
                   zIndex: layer.zIndex,
                 }}
               >
-                {/* Seçili Katman Göstergesi */}
-                {selectedLayerId === layer.id && layer.filters.visible && (
-                  <div
-                    className="absolute inset-0 pointer-events-none z-10"
-                    style={{
-                      border: '2px dashed rgba(0, 240, 255, 0.8)',
-                      boxShadow: 'inset 0 0 10px rgba(0, 240, 255, 0.3)',
-                    }}
-                  />
-                )}
-
-                {/* Medya İçeriği */}
+                {/* Medya İçeriği Container */}
                 <div
-                  className="w-full h-full flex items-center justify-center"
+                  className="relative group pointer-events-auto"
                   style={getFilterStyle(layer)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedLayerId !== layer.id) {
+                      setSelectedLayerId(layer.id);
+                    }
+                  }}
                 >
+                  {/* Transform Controls - Sadece seçili ise ve görünür ise */}
+                  {selectedLayerId === layer.id && layer.filters.visible && (
+                    <TransformControls
+                      layer={layer}
+                      canvasScale={scale}
+                      canvasSize={canvasSize}
+                      onUpdate={(updates) => updateLayerFilters(layer.id, updates)}
+                    />
+                  )}
+
                   {isScrolling ? (
-                    <InfiniteScroll speedX={layer.filters.uvScrollX} speedY={layer.filters.uvScrollY}>
-                      {content}
-                    </InfiniteScroll>
+                    <>
+                      {/* Ghost element to maintain size */}
+                      <div className="opacity-0 pointer-events-none">
+                        {content}
+                      </div>
+                      {/* Actual scrolling content */}
+                      <div className="absolute inset-0">
+                        <InfiniteScroll speedX={layer.filters.uvScrollX} speedY={layer.filters.uvScrollY}>
+                          {content}
+                        </InfiniteScroll>
+                      </div>
+                    </>
                   ) : (
                     content
+                  )}
+
+                  {/* Seçili değilken hover efekti (Seçilebilir olduğunu göstermek için) */}
+                  {selectedLayerId !== layer.id && (
+                    <div className="absolute inset-0 border-2 border-transparent group-hover:border-primary/30 transition-colors pointer-events-none" />
                   )}
                 </div>
               </div>
