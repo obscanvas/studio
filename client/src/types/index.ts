@@ -94,6 +94,8 @@ export interface ProjectConfig {
   layers: Layer[];
   /** Son güncelleme tarihi */
   lastModified: string;
+  /** Sahne görünürlüğü (Public/Private) */
+  isPublic: boolean;
 }
 
 /**
@@ -137,6 +139,7 @@ export const DEFAULT_PROJECT_CONFIG: ProjectConfig = {
   backgroundColor: '#0a0a0f',
   layers: [],
   lastModified: new Date().toISOString(),
+  isPublic: true,
 };
 
 /**

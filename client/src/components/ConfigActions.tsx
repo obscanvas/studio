@@ -5,7 +5,7 @@
  * JSON dışa/içe aktarma, sıfırlama işlemleri
  */
 
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { useProject } from '@/contexts/ProjectContext';
 import { Button } from '@/components/ui/button';
 import {
@@ -28,10 +28,12 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Download, Upload, RotateCcw, MoreVertical, Save, FileJson } from 'lucide-react';
 import { toast } from 'sonner';
+import { ShareDialog } from './ShareDialog';
 
 export function ConfigActions() {
   const { config, exportConfig, importConfig, resetConfig, saveConfig, shareProject } = useProject();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const handleExport = () => {
     const json = exportConfig();
@@ -103,13 +105,7 @@ export function ConfigActions() {
           className="bg-card border-primary/30 w-48"
         >
           <DropdownMenuItem
-            onClick={async () => {
-              const link = await shareProject();
-              if (link) {
-                navigator.clipboard.writeText(link);
-                toast.success('Paylaşım linki kopyalandı!');
-              }
-            }}
+            onClick={() => setShareDialogOpen(true)}
             className="focus:bg-primary/20 cursor-pointer text-primary"
           >
             <Download className="w-4 h-4 mr-2 rotate-180" />
@@ -180,6 +176,20 @@ export function ConfigActions() {
           </AlertDialog>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Share Dialog */}
+      <ShareDialog
+        isOpen={shareDialogOpen}
+        onClose={() => setShareDialogOpen(false)}
+        currentIsPublic={config.isPublic}
+        onShare={async (isPublic) => {
+          const link = await shareProject(isPublic);
+          if (link) {
+            navigator.clipboard.writeText(link);
+            toast.success('Paylaşım linki kopyalandı!');
+          }
+        }}
+      />
     </>
   );
 }

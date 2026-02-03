@@ -40,7 +40,7 @@ interface ProjectContextType {
   resetConfig: () => Promise<void>;
   exportConfig: () => string;
   importConfig: (jsonString: string) => boolean;
-  shareProject: () => Promise<string | null>;
+  shareProject: (isPublic: boolean) => Promise<string | null>;
 }
 
 const ProjectContext = createContext<ProjectContextType | undefined>(undefined);

@@ -169,16 +169,34 @@ export function useStorage(
         }
     }, [projectId, setConfig, setIsLoading, setProjectId]);
 
-    const shareProject = async (): Promise<string | null> => {
+    const shareProject = async (isPublic: boolean): Promise<string | null> => {
         try {
+            // Update config with isPublic setting
+            const updatedConfig = { ...config, isPublic, lastModified: new Date().toISOString() };
+
             if (projectId) {
+                // Update existing scene
+                const { error } = await supabase
+                    .from('scenes')
+                    .update({ config: updatedConfig, updated_at: new Date().toISOString() })
+                    .eq('id', projectId);
+
+                if (error) {
+                    console.error('Share error:', error);
+                    toast.error('Paylaşım linki güncellenemedi');
+                    return null;
+                }
+
+                // Update local config
+                setConfig(updatedConfig);
                 await saveConfig();
                 return `${window.location.origin}${window.location.pathname}#/?id=${projectId}`;
             } else {
+                // Create new scene
                 const newId = Math.random().toString(36).substring(2, 10);
                 const { error } = await supabase
                     .from('scenes')
-                    .insert([{ id: newId, config, created_at: new Date().toISOString() }]);
+                    .insert([{ id: newId, config: updatedConfig, created_at: new Date().toISOString() }]);
 
                 if (error) {
                     console.error('Share error:', error);
@@ -187,6 +205,7 @@ export function useStorage(
                 }
 
                 setProjectId(newId);
+                setConfig(updatedConfig);
                 localStorage.setItem(ID_KEY, newId);
 
                 const currentUrl = new URL(window.location.href);
@@ -196,6 +215,8 @@ export function useStorage(
                 return `${window.location.origin}${window.location.pathname}#/?id=${newId}`;
             }
         } catch (e) {
+            console.error('Share exception:', e);
+            toast.error('Bir hata oluştu');
             return null;
         }
     };
