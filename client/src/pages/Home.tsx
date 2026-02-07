@@ -43,74 +43,99 @@ export default function Home() {
   const [config, setConfig] = useState<ProjectConfig>(DEFAULT_PROJECT_CONFIG);
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 });
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Helper to extract ID from URL (hash or query)
+  const getProjectIdFromUrl = useCallback(() => {
+    const hash = window.location.hash;
+    const search = hash.includes("?") ? hash.split("?")[1] : window.location.search.substring(1);
+    const params = new URLSearchParams(search);
+    return params.get("id");
+  }, []);
 
   // Redirect logic based on auth and URL params
   useEffect(() => {
     if (isAuthLoading) return;
 
-    const search = window.location.hash.includes("?")
-      ? window.location.hash.split("?")[1]
-      : window.location.search.substring(1);
-    const params = new URLSearchParams(search);
-    const id = params.get("id");
+    const id = getProjectIdFromUrl();
 
-    // Only redirect if NO ID is present (landing page behavior)
+    // Only redirect to dashboard if NO ID is present (landing page behavior)
     if (!id) {
-      if (user) {
-        setLocation("/projects");
-      } else {
-        setLocation("/projects");
-      }
+      // If main page without ID, go to dashboard/projects
+      setLocation("/projects");
     }
-  }, [user, isAuthLoading, setLocation]);
+  }, [user, isAuthLoading, setLocation, getProjectIdFromUrl]);
 
   const loadConfig = useCallback(async () => {
+    setError(null);
+    setIsLoading(true);
     try {
-      const search = window.location.hash.includes("?")
-        ? window.location.hash.split("?")[1]
-        : window.location.search.substring(1);
-      const params = new URLSearchParams(search);
-      const id = params.get("id");
+      const id = getProjectIdFromUrl();
 
       if (id) {
-        let { data, error } = await supabase
+        // Try fetching the project
+        // explicitly select is_public to be sure
+        let query = supabase
           .from("scenes")
           .select("config, is_public")
           .eq("id", id)
           .single();
 
-        if (error && isAccessColumnError(error)) {
-          const legacyResult = await supabase
-            .from("scenes")
-            .select("config")
-            .eq("id", id)
-            .single();
-          data = legacyResult.data ? { ...legacyResult.data, is_public: undefined } : null;
-          error = legacyResult.error;
+        let { data, error } = await query;
+
+        if (error) {
+          // Fallback for some RLS cases or legacy data
+          if (isAccessColumnError(error)) {
+            const legacyResult = await supabase
+              .from("scenes")
+              .select("config")
+              .eq("id", id)
+              .single();
+
+            if (legacyResult.data) {
+              data = { config: legacyResult.data.config, is_public: true }; // Assume true if we could read it
+              error = null;
+            } else {
+              error = legacyResult.error;
+            }
+          }
         }
 
-        if (data && !error) {
+        if (error) {
+          console.error("Supabase Error:", error);
+          setError("Proje yüklenemedi veya erişim izniniz yok.");
+          setIsLoading(false);
+          return;
+        }
+
+        if (data) {
           setConfig(normalizeProjectConfig(data.config, data.is_public ?? undefined));
           setIsLoading(false);
           return;
         }
-      }
-
-      if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-        const response = await fetch("/api/config");
-        if (response.ok) {
-          const serverConfig = await response.json();
-          if (serverConfig) {
-            setConfig(normalizeProjectConfig(serverConfig));
+      } else {
+        // ID yoksa veya local dev ise
+        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
+          // Local dev fallback
+          const response = await fetch("/api/config");
+          if (response.ok) {
+            const serverConfig = await response.json();
+            if (serverConfig) {
+              setConfig(normalizeProjectConfig(serverConfig));
+            }
+          } else {
+            // No ID and no local API -> probably will redirect anyway, 
+            // but if we are here, just stop loading
           }
         }
       }
     } catch (error) {
       console.error("Config load failed:", error);
+      setError("Beklenmeyen bir hata oluştu.");
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [getProjectIdFromUrl]);
 
   useEffect(() => {
     void loadConfig();
@@ -262,8 +287,19 @@ export default function Home() {
         <div className="absolute inset-0 flex items-center justify-center bg-background/50 backdrop-blur-sm z-[100]">
           <RefreshCw className="w-8 h-8 animate-spin text-primary" />
         </div>
+      ) : error ? (
+        <div className="absolute inset-0 flex items-center justify-center bg-black text-white pointer-events-auto">
+          <div className="text-center p-6 border border-red-500/30 bg-red-950/20 rounded-lg backdrop-blur-md">
+            <p className="text-lg font-bold text-red-500 mb-2">Hata</p>
+            <p className="text-sm opacity-80">{error}</p>
+            <div className="mt-4 text-xs text-gray-500">
+              Login gerekmeden yayın görüntülemek için <a href="/#/projects" className="text-primary hover:underline">ana sayfaya</a> gidebilirsiniz.
+            </div>
+          </div>
+        </div>
       ) : (
         <>
+
           <div className="absolute inset-0">
             {tilePositions.map((pos, index) => (
               <div
