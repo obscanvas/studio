@@ -19,8 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Image, Film, FileImage, Upload, Link, AlertCircle } from 'lucide-react';
+import { Image, Film, FileImage, Upload, Link, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { uploadToCloudinary } from '@/lib/cloudinary';
 
 interface AddMediaDialogProps {
   open: boolean;
@@ -34,12 +35,14 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
   const [mediaType, setMediaType] = useState<MediaType>('image');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const resetForm = () => {
     setLayerName('');
     setMediaUrl('');
     setPreviewUrl(null);
+    setSelectedFile(null);
     setIsLoading(false);
   };
 
@@ -57,6 +60,7 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
 
   const handleUrlChange = (url: string) => {
     setMediaUrl(url);
+    setSelectedFile(null); // URL girilirse dosya seçimini iptal et
     if (url) {
       const detected = detectMediaType(url);
       setMediaType(detected);
@@ -89,35 +93,54 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
       setMediaType('image');
     }
 
-    // Dosyayı base64'e çevir
-    setIsLoading(true);
+    setSelectedFile(file);
+
+    // Önizleme için dosya okuma (Base64) - Yükleme henüz başlamadı
     const reader = new FileReader();
     reader.onload = (e) => {
       const result = e.target?.result as string;
-      setMediaUrl(result);
       setPreviewUrl(result);
-      setIsLoading(false);
 
       // Dosya adını katman adı olarak öner
       if (!layerName) {
         setLayerName(file.name.replace(/\.[^/.]+$/, ''));
       }
     };
-    reader.onerror = () => {
-      toast.error('Dosya okunamadı');
-      setIsLoading(false);
-    };
     reader.readAsDataURL(file);
   }, [layerName]);
 
-  const handleAddLayer = () => {
-    if (!mediaUrl) {
+  const handleAddLayer = async () => {
+    let finalSource = mediaUrl;
+
+    // Dosya seçilmişse önce Cloudinary'ye yükle
+    if (selectedFile) {
+      setIsLoading(true);
+      const uploadedUrl = await uploadToCloudinary(selectedFile);
+
+      if (uploadedUrl) {
+        finalSource = uploadedUrl;
+        toast.success("Dosya buluta yüklendi");
+      } else {
+        // Yükleme başarısız olursa kullanıcıya sorulabilir veya hata verilebilir.
+        // Şimdilik uyarı verip base64 (previewUrl) kullanmaya izin verelim ama uyaralım.
+        const useBase64 = confirm("Bulut yüklemesi başarısız oldu. Yine de Base64 olarak eklemek ister misiniz? (Bu veritabanını şişirebilir)");
+        if (useBase64 && previewUrl) {
+          finalSource = previewUrl;
+        } else {
+          setIsLoading(false);
+          return;
+        }
+      }
+      setIsLoading(false);
+    }
+
+    if (!finalSource) {
       toast.error('Lütfen bir medya kaynağı seçin');
       return;
     }
 
     const name = layerName || `${mediaType.charAt(0).toUpperCase() + mediaType.slice(1)} Katmanı`;
-    addLayer(name, mediaType, mediaUrl);
+    await addLayer(name, mediaType, finalSource);
     toast.success(`"${name}" katmanı eklendi`);
     handleClose();
   };
@@ -158,7 +181,13 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
           </div>
 
           {/* Medya Kaynağı Seçimi */}
-          <Tabs defaultValue="upload" className="w-full">
+          <Tabs defaultValue="upload" className="w-full" onValueChange={(val) => {
+            if (val === 'upload') setMediaUrl('');
+            if (val === 'url') {
+              setSelectedFile(null);
+              setPreviewUrl(null);
+            }
+          }}>
             <TabsList className="w-full bg-secondary">
               <TabsTrigger
                 value="upload"
@@ -178,8 +207,8 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
 
             <TabsContent value="upload" className="mt-4">
               <div
-                className="border-2 border-dashed border-primary/30 rounded-lg p-6 md:p-8 text-center cursor-pointer hover:border-primary/60 hover:bg-primary/5 transition-colors"
-                onClick={() => fileInputRef.current?.click()}
+                className="border-2 border-dashed border-primary/30 rounded-lg p-6 md:p-8 text-center cursor-pointer hover:border-primary/60 hover:bg-primary/5 transition-colors relative"
+                onClick={() => !isLoading && fileInputRef.current?.click()}
               >
                 <input
                   ref={fileInputRef}
@@ -187,14 +216,25 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
                   accept="image/*,video/*"
                   onChange={handleFileSelect}
                   className="hidden"
+                  disabled={isLoading}
                 />
-                <Upload className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4 text-primary/50" />
-                <p className="text-sm text-muted-foreground">
-                  Dosya seçmek için tıklayın veya sürükleyin
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  PNG, JPG, GIF, MP4, WEBM desteklenir
-                </p>
+
+                {isLoading ? (
+                  <div className="flex flex-col items-center justify-center py-4">
+                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-2" />
+                    <p className="text-sm text-primary">Buluta Yükleniyor...</p>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4 text-primary/50" />
+                    <p className="text-sm text-muted-foreground">
+                      Dosya seçmek için tıklayın veya sürükleyin
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      PNG, JPG, GIF, MP4, WEBM desteklenir
+                    </p>
+                  </>
+                )}
               </div>
             </TabsContent>
 
@@ -244,9 +284,7 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
                 Önizleme
               </Label>
               <div className="relative bg-secondary rounded-lg overflow-hidden border border-primary/30 aspect-video flex items-center justify-center">
-                {isLoading ? (
-                  <div className="text-muted-foreground">Yükleniyor...</div>
-                ) : mediaType === 'video' ? (
+                {mediaType === 'video' ? (
                   <video
                     src={previewUrl}
                     controls
@@ -264,6 +302,13 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
                   />
                 )}
 
+                {/* Bulut Durumu */}
+                {selectedFile && !isLoading && (
+                  <div className="absolute bottom-2 right-2 bg-yellow-500/90 text-black px-2 py-1 rounded text-[10px] font-bold">
+                    YÜKLENMEDİ (Yerel)
+                  </div>
+                )}
+
                 {/* Medya Türü Etiketi */}
                 <div className="absolute top-2 right-2 bg-background/80 px-2 py-1 rounded text-xs font-tech flex items-center gap-1">
                   {getMediaIcon(mediaType)}
@@ -274,11 +319,14 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
           )}
 
           {/* Uyarı */}
-          {mediaUrl && mediaUrl.startsWith('data:') && (
+          {previewUrl && previewUrl.startsWith('data:') && (
             <div className="flex items-start gap-2 p-3 bg-accent/10 rounded border border-accent/30 text-sm">
               <AlertCircle className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
               <p className="text-muted-foreground">
-                Dosya base64 olarak kaydedilecek. Büyük dosyalar performansı etkileyebilir.
+                {selectedFile
+                  ? "Dosya 'Katman Ekle' butonuna basıldığında Cloudinary'ye yüklenecektir."
+                  : "Base64 veri tespit edildi. Bu büyük veriler veritabanını yavaşlatabilir."
+                }
               </p>
             </div>
           )}
@@ -289,17 +337,27 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
           <Button
             variant="outline"
             onClick={handleClose}
+            disabled={isLoading}
             className="border-primary/30 hover:border-primary hover:bg-primary/10"
           >
             İptal
           </Button>
           <Button
             onClick={handleAddLayer}
-            disabled={!mediaUrl || isLoading}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
+            disabled={(!mediaUrl && !selectedFile) || isLoading}
+            className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]"
           >
-            <Upload className="w-4 h-4 mr-2" />
-            Katman Ekle
+            {isLoading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Yükleniyor...
+              </>
+            ) : (
+              <>
+                <Upload className="w-4 h-4 mr-2" />
+                Katman Ekle
+              </>
+            )}
           </Button>
         </div>
       </DialogContent>

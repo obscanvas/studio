@@ -6,25 +6,12 @@ export function useLayerManager(
     setConfig: React.Dispatch<React.SetStateAction<ProjectConfig>>,
     setSelectedLayerId: (id: string | null) => void
 ) {
-    const addLayer = useCallback(async (name: string, type: MediaType, source: string, uploadFn?: (file: File) => Promise<string | null>) => {
-        let finalSource = source;
-
-        if (source.startsWith('data:') && uploadFn) {
-            const response = await fetch(source);
-            const blob = await response.blob();
-            const file = new File([blob], name, { type: blob.type });
-
-            const cloudUrl = await uploadFn(file);
-            if (cloudUrl) {
-                finalSource = cloudUrl;
-            }
-        }
-
+    const addLayer = useCallback(async (name: string, type: MediaType, source: string) => {
         const maxZIndex = config.layers.length > 0
             ? Math.max(...config.layers.map(l => l.zIndex))
             : 0;
 
-        const newLayer = createNewLayer(name, type, finalSource, maxZIndex + 1);
+        const newLayer = createNewLayer(name, type, source, maxZIndex + 1);
 
         setConfig(prev => ({
             ...prev,

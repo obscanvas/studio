@@ -54,7 +54,6 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
   const selectedLayer = config.layers.find(l => l.id === selectedLayerId) || null;
 
   const {
-    uploadToStorage,
     saveConfig,
     loadConfig,
     shareProject
@@ -72,7 +71,7 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
 
   // Wrappers/Augmentations
   const addLayer = (name: string, type: MediaType, source: string) =>
-    originalAddLayer(name, type, source, uploadToStorage);
+    originalAddLayer(name, type, source);
 
   const removeLayer = (layerId: string) => {
     originalRemoveLayer(layerId);

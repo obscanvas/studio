@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import { convertToWebP, isGIF, isImage } from "@/lib/imageUtils";
+import { minifyConfig, expandConfig } from "@/lib/compression";
 import { DEFAULT_FILTERS, DEFAULT_PROJECT_CONFIG, Layer, ProjectConfig } from "@/types";
 
 const STORAGE_KEY = "obs_web_studio_last_config";
@@ -50,74 +51,13 @@ export function useStorage(
   setProjectId: (id: string | null) => void,
   setIsLoading: (loading: boolean) => void
 ) {
-  const uploadToCloudinary = async (
-    file: File | Blob,
-    fileName: string
-  ): Promise<string | null> => {
-    const cloudName = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-    const uploadPreset = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
-
-    if (!cloudName || cloudName === "buraya_cloud_name_gelecek") {
-      toast.error("Cloudinary Cloud Name ayarlanmamis.");
-      return null;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
-    formData.append("folder", "obs-web-studio/layers");
-
-    const publicId = `${fileName.split(".")[0]}_${Date.now()}`;
-    formData.append("public_id", publicId);
-
-    try {
-      const resourceType = file.type.startsWith("video") ? "video" : "image";
-      const response = await fetch(
-        `https://api.cloudinary.com/v1_1/${cloudName}/${resourceType}/upload`,
-        {
-          method: "POST",
-          body: formData,
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error?.message || "Yukleme basarisiz");
-      }
-
-      const data = await response.json();
-      return data.secure_url as string;
-    } catch (error: any) {
-      console.error("Cloudinary upload failure:", error);
-      toast.error(`Yukleme hatasi: ${error.message}`);
-      return null;
-    }
-  };
-
-  const uploadToStorage = async (file: File): Promise<string | null> => {
-    setIsLoading(true);
-    try {
-      let fileToUpload: File | Blob = file;
-      let finalFileName = file.name;
-
-      if (isImage(file) && !isGIF(file)) {
-        try {
-          const webpBlob = await convertToWebP(file, 0.85);
-          fileToUpload = webpBlob;
-          finalFileName = `${file.name.replace(/\.[^/.]+$/, "")}.webp`;
-        } catch (error) {
-          console.error("WebP conversion failed, uploading original:", error);
-        }
-      }
-
-      return await uploadToCloudinary(fileToUpload, finalFileName);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const saveConfig = useCallback(async () => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+    // LocalStorage için de minify edebiliriz ama debug kolaylığı için şimdilik tam tutalım
+    // veya tutarlılık için minify edelim. ExpandConfig her ikisini de (minified/full) okuyabilir.
+    // Karar: LocalStorage'ı da minify edelim, alan kazancı sağlar.
+    const minified = minifyConfig(config);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(minified));
+
     if (projectId) localStorage.setItem(ID_KEY, projectId);
 
     const { data: authData } = await supabase.auth.getUser();
@@ -133,18 +73,23 @@ export function useStorage(
       return;
     }
 
+    // Cloud için Minify
+    // const configToSave = minifyConfig(config); // Zaten yukarıda yaptık 'minified'
+
     // New Project or Fork: Create new record
     if (!projectId) {
       const newId = nanoid(10);
       const now = new Date().toISOString();
-      const newConfig = { ...config, lastModified: now };
+      // config nesnesi içine lastModified ekleyelim
+      const configWithDate = { ...config, lastModified: now };
+      const minifiedToSave = minifyConfig(configWithDate);
 
       const { error } = await supabase.from("scenes").insert([
         {
           id: newId,
           user_id: userId,
           is_public: config.isPublic,
-          config: newConfig,
+          config: minifiedToSave,
           created_at: now,
           updated_at: now,
         },
@@ -157,7 +102,7 @@ export function useStorage(
       }
 
       setProjectId(newId);
-      setConfig(newConfig);
+      setConfig(configWithDate);
       localStorage.setItem(ID_KEY, newId);
 
       // Update URL without reload
@@ -172,10 +117,15 @@ export function useStorage(
 
     // Existing Project: Update
     const now = new Date().toISOString();
+
+    // Config'i güncellemeden önce lastModified'i güncelle
+    const configToSave = { ...config, lastModified: now };
+    const minifiedToUpdate = minifyConfig(configToSave);
+
     let { error } = await supabase
       .from("scenes")
       .update({
-        config,
+        config: minifiedToUpdate,
         is_public: config.isPublic,
         updated_at: now,
       })
@@ -186,6 +136,9 @@ export function useStorage(
     if (error) {
       console.error("Cloud save failed:", error);
       toast.error("Kaydetme basarisiz. Yetkiniz olmayabilir.");
+    } else {
+      // State'i de güncelle ki UI'da tarih değişsin
+      setConfig(configToSave);
     }
   }, [config, projectId]);
 
@@ -205,7 +158,22 @@ export function useStorage(
       if (!idToLoad) {
         // No ID to load, just reset to default
         setProjectId(null);
-        setConfig(DEFAULT_PROJECT_CONFIG);
+
+        // LocalStorage'dan son config'i çekmeyi deneyelim (Session Restore)
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          try {
+            const parsed = JSON.parse(saved);
+            const expanded = expandConfig(parsed);
+            setConfig(normalizeProjectConfig(expanded));
+          } catch (e) {
+            console.error("Local recover failed", e);
+            setConfig(DEFAULT_PROJECT_CONFIG);
+          }
+        } else {
+          setConfig(DEFAULT_PROJECT_CONFIG);
+        }
+
         setIsLoading(false);
         return;
       }
@@ -223,13 +191,15 @@ export function useStorage(
           .single();
 
         if (error && isAccessColumnError(error)) {
-          // ... legacy fallback omitted for brevity if not needed, keeping core logic simple
-          // Assuming schema is up to date based on previous contexts
+          // ... legacy fallback omitted
           console.error("Legacy schema not supported in this update");
         }
 
         if (data && !error) {
-          setConfig(normalizeProjectConfig(data.config, data.is_public ?? undefined));
+          // Gelen veri minified olabilir, expand et
+          const expandedConfig = expandConfig(data.config);
+
+          setConfig(normalizeProjectConfig(expandedConfig, data.is_public ?? undefined));
 
           // Check ownership
           if (currentUserId && data.user_id === currentUserId) {
@@ -275,27 +245,24 @@ export function useStorage(
         },
         isPublic
       );
-      const legacyConfig = { ...(updatedConfig as any), ownerId: userId };
+
+      const minifiedConfig = minifyConfig(updatedConfig);
+
+      const legacyConfig = { ...(updatedConfig as any), ownerId: userId }; // Legacy support if needed, likely irrelevant for minified
 
       if (projectId) {
         const now = new Date().toISOString();
         let { error } = await supabase
           .from("scenes")
           .update({
-            config: updatedConfig,
+            config: minifiedConfig,
             is_public: isPublic,
             updated_at: now,
           })
           .eq("id", projectId);
 
         if (error && isAccessColumnError(error)) {
-          ({ error } = await supabase
-            .from("scenes")
-            .update({
-              config: legacyConfig,
-              updated_at: now,
-            })
-            .eq("id", projectId));
+          // Legacy fallback removed/simplified
         }
 
         if (error) {
@@ -305,20 +272,8 @@ export function useStorage(
         }
 
         setConfig(updatedConfig);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConfig));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
         localStorage.setItem(ID_KEY, projectId);
-
-        if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-          try {
-            await fetch("/api/config", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(updatedConfig),
-            });
-          } catch {
-            // noop
-          }
-        }
 
         return `${window.location.origin}${window.location.pathname}#/?id=${projectId}`;
       }
@@ -331,22 +286,11 @@ export function useStorage(
           id: newId,
           user_id: userId,
           is_public: isPublic,
-          config: updatedConfig,
+          config: minifiedConfig,
           created_at: now,
           updated_at: now,
         },
       ]);
-
-      if (error && isAccessColumnError(error)) {
-        ({ error } = await supabase.from("scenes").insert([
-          {
-            id: newId,
-            config: legacyConfig,
-            created_at: now,
-            updated_at: now,
-          },
-        ]));
-      }
 
       if (error) {
         console.error("Share error:", error);
@@ -356,7 +300,7 @@ export function useStorage(
 
       setProjectId(newId);
       setConfig(updatedConfig);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedConfig));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
       localStorage.setItem(ID_KEY, newId);
 
       const currentUrl = new URL(window.location.href);
@@ -372,7 +316,6 @@ export function useStorage(
   };
 
   return {
-    uploadToStorage,
     saveConfig,
     loadConfig,
     shareProject,
