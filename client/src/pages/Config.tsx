@@ -88,7 +88,7 @@ function ConfigContent() {
   };
 
   return (
-    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden supports-[height:100cqh]:h-[100cqh]">
+    <div className="h-[100dvh] w-full bg-background flex flex-col overflow-hidden">
       {/* Header - Responsive */}
       <header className="h-14 border-b border-primary/30 bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 shrink-0 z-50 overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-3 shrink-0">
