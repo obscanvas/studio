@@ -59,7 +59,7 @@ export default function Home() {
       if (user) {
         setLocation("/projects");
       } else {
-        setLocation("/login");
+        setLocation("/projects");
       }
     }
   }, [user, isAuthLoading, setLocation]);

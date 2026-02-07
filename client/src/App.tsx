@@ -69,7 +69,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/login" component={Login} />
         <Route path="/config" component={ProtectedConfig} />
-        <Route path="/projects" component={ProtectedProjects} />
+        <Route path="/projects" component={Projects} />
         <Route path="/docs" component={Docs} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

@@ -80,7 +80,7 @@ export default function Projects() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [localProjectId, setLocalProjectId] = useState<string | null>(null);
-  const userEmail = user?.email ?? "Google account";
+  const userEmail = user?.email ?? "Misafir Kullanıcı";
 
   useEffect(() => {
     setLocalProjectId(localStorage.getItem(LOCAL_ID_KEY));
@@ -94,30 +94,40 @@ export default function Projects() {
     }
   }, []);
 
-  useEffect(() => {
-    if (!isAuthLoading && !user) {
-      setLocation("/login");
-    }
-  }, [isAuthLoading, setLocation, user]);
+  // Remove mandatory login redirect
+  // useEffect(() => {
+  //   if (!isAuthLoading && !user) {
+  //     setLocation("/login");
+  //   }
+  // }, [isAuthLoading, setLocation, user]);
 
   const loadProjects = useCallback(async () => {
-    if (!user) return;
+    // if (!user) return; // Allow loading for guests
 
     setIsLoading(true);
     try {
       let rowsSource: any[] = [];
 
-      const withAccess = await supabase
+      // If user is logged in, fetch as before (all access). 
+      // If guest, fetch only public projects.
+      let query = supabase
         .from("scenes")
         .select("id, config, is_public, user_id, created_at, updated_at")
         .order("updated_at", { ascending: false })
         .limit(100);
+
+      if (!user) {
+        query = query.eq("is_public", true);
+      }
+
+      const withAccess = await query;
 
       if (withAccess.error) {
         if (!isAccessColumnError(withAccess.error)) {
           throw withAccess.error;
         }
 
+        // Fallback for legacy schema (if applicable, though unnecessary for guests usually)
         const legacy = await supabase
           .from("scenes")
           .select("id, config, created_at, updated_at")
@@ -164,9 +174,9 @@ export default function Projects() {
   }, [user]);
 
   useEffect(() => {
-    if (!user) return;
+    if (isAuthLoading) return;
     void loadProjects();
-  }, [loadProjects, user]);
+  }, [loadProjects, isAuthLoading]);
 
   const handleDeleteProject = async (id: string) => {
     try {
@@ -198,9 +208,14 @@ export default function Projects() {
 
   const myProjectIds = useMemo(() => new Set(myProjects.map((project) => project.id)), [myProjects]);
 
+  // For guests, show all fetched projects (which are already filtered by is_public=true in query)
+  // For users, show public projects that are NOT theirs (exploration)
   const exploreProjects = useMemo(
-    () => projects.filter((project) => project.isPublic && !myProjectIds.has(project.id)),
-    [myProjectIds, projects]
+    () => {
+      if (!user) return projects; // API already filtered for public
+      return projects.filter((project) => project.isPublic && !myProjectIds.has(project.id));
+    },
+    [myProjectIds, projects, user]
   );
 
   const handleSignOut = async () => {
@@ -216,13 +231,16 @@ export default function Projects() {
     }
   };
 
-  if (isAuthLoading || (!user && !isAuthLoading)) {
+  if (isAuthLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <RefreshCw className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
+
+  // Default tab based on auth status
+  const defaultTab = user ? "mine" : "explore";
 
   return (
     <div className="min-h-screen bg-background cyber-grid">
@@ -237,7 +255,7 @@ export default function Projects() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link href="/config?new=true">
+            <Link href={user ? "/config?new=true" : "/login"}>
               <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
                 <Settings className="w-4 h-4 mr-2" />
                 Yeni Proje
@@ -252,110 +270,126 @@ export default function Projects() {
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? "animate-spin" : ""}`} />
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              disabled={isSigningOut}
-              className="border-primary/30 hover:border-primary"
-            >
-              {isSigningOut ? (
-                <RefreshCw className="w-4 h-4 animate-spin" />
-              ) : (
-                <LogOut className="w-4 h-4" />
-              )}
-            </Button>
+            {user ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSignOut}
+                disabled={isSigningOut}
+                className="border-primary/30 hover:border-primary"
+              >
+                {isSigningOut ? (
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LogOut className="w-4 h-4" />
+                )}
+              </Button>
+            ) : (
+              <Link href="/login">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-primary/30 hover:border-primary"
+                >
+                  Giriş Yap
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </header>
 
       <main className="p-4 md:p-6">
-        <Tabs defaultValue="mine" className="gap-4">
+        <Tabs defaultValue={defaultTab} className="gap-4">
           <TabsList className="w-full md:w-auto bg-secondary/60">
-            <TabsTrigger value="mine" className="flex-1 md:flex-none">
-              <FolderKanban className="w-4 h-4 mr-1" />
-              Kendi Projelerim ({myProjects.length})
-            </TabsTrigger>
+            {user && (
+              <TabsTrigger value="mine" className="flex-1 md:flex-none">
+                <FolderKanban className="w-4 h-4 mr-1" />
+                Kendi Projelerim ({myProjects.length})
+              </TabsTrigger>
+            )}
             <TabsTrigger value="explore" className="flex-1 md:flex-none">
               <Compass className="w-4 h-4 mr-1" />
               Kesfet ({exploreProjects.length})
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="mine">
-            {myProjects.length === 0 ? (
-              <Card className="cyber-panel bg-card/40 border-primary/20">
-                <CardContent className="py-10 text-center text-muted-foreground">
-                  <FolderKanban className="w-10 h-10 mx-auto mb-3 opacity-40" />
-                  Henuz size ait proje bulunamadi.
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-                {myProjects.map((project) => (
-                  <Card key={project.id} className="cyber-panel bg-card/50 border-primary/20 overflow-hidden flex flex-col">
-                    {/* Thumbnail Area */}
-                    <div className="aspect-video w-full border-b border-primary/10 relative group">
-                      <ProjectThumbnail config={project.config} />
-                      <Link href={`/config?id=${project.id}`}>
-                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                          <Button variant="secondary" size="sm">Düzenle</Button>
-                        </div>
-                      </Link>
-                    </div>
+          {user && (
+            <TabsContent value="mine">
+              {myProjects.length === 0 ? (
+                <Card className="cyber-panel bg-card/40 border-primary/20">
+                  <CardContent className="py-10 text-center text-muted-foreground">
+                    <FolderKanban className="w-10 h-10 mx-auto mb-3 opacity-40" />
+                    Henuz size ait proje bulunamadi.
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+                  {myProjects.map((project) => (
+                    <Card key={project.id} className="cyber-panel bg-card/50 border-primary/20 overflow-hidden flex flex-col">
+                      {/* Thumbnail Area */}
+                      <div className="aspect-video w-full border-b border-primary/10 relative group">
+                        <ProjectThumbnail config={project.config} />
+                        <Link href={`/config?id=${project.id}`}>
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
+                            <Button variant="secondary" size="sm">Düzenle</Button>
+                          </div>
+                        </Link>
+                      </div>
 
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <CardTitle className="text-base font-display truncate pr-2" title={project.config.name}>
-                            {project.config.name}
-                          </CardTitle>
-                          <CardDescription className="text-xs">ID: {project.id}</CardDescription>
+                      <CardHeader className="pb-2">
+                        <div className="flex items-start justify-between">
+                          <div className="space-y-1">
+                            <CardTitle className="text-base font-display truncate pr-2" title={project.config.name}>
+                              {project.config.name}
+                            </CardTitle>
+                            <CardDescription className="text-xs">ID: {project.id}</CardDescription>
+                          </div>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive -mt-1 -mr-2">
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Projeyi Sil?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Bu işlem geri alınamaz. "{project.config.name}" projesi kalıcı olarak silinecek.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>İptal</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleDeleteProject(project.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                  Sil
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive -mt-1 -mr-2">
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Projeyi Sil?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Bu işlem geri alınamaz. "{project.config.name}" projesi kalıcı olarak silinecek.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>İptal</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleDeleteProject(project.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                Sil
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-xs text-muted-foreground flex-1 flex flex-col justify-end pt-0">
-                      <div className="flex items-center justify-between">
-                        <span>Katman</span>
-                        <span className="text-primary">{project.config.layers.length}</span>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span>Guncelleme</span>
-                        <span>{formatDate(project.updated_at)}</span>
-                      </div>
-                      <Link href={`/config?id=${project.id}`} className="mt-2 block">
-                        <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-                          <Settings className="w-4 h-4 mr-2" />
-                          Config'te Ac
-                        </Button>
-                      </Link>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
+                      </CardHeader>
+                      <CardContent className="space-y-3 text-xs text-muted-foreground flex-1 flex flex-col justify-end pt-0">
+                        <div className="flex items-center justify-between">
+                          <span>Katman</span>
+                          <span className="text-primary">{project.config.layers.length}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span>Guncelleme</span>
+                          <span>{formatDate(project.updated_at)}</span>
+                        </div>
+                        <Link href={`/config?id=${project.id}`} className="mt-2 block">
+                          <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
+                            <Settings className="w-4 h-4 mr-2" />
+                            Config'te Ac
+                          </Button>
+                        </Link>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          )}
 
           <TabsContent value="explore">
             {exploreProjects.length === 0 ? (
@@ -378,8 +412,12 @@ export default function Projects() {
                       </Link>
                     </div>
                     <CardHeader className="pb-2">
-                      <CardTitle className="text-base font-display truncate">{project.config.name}</CardTitle>
-                      <CardDescription>ID: {project.id}</CardDescription>
+                      <div className="space-y-1">
+                        <CardTitle className="text-base font-display truncate pr-2" title={project.config.name}>
+                          {project.config.name}
+                        </CardTitle>
+                        <CardDescription className="text-xs">ID: {project.id}</CardDescription>
+                      </div>
                     </CardHeader>
                     <CardContent className="space-y-3 text-xs text-muted-foreground flex-1 flex flex-col justify-end pt-0">
                       <div className="flex items-center justify-between">
@@ -391,13 +429,15 @@ export default function Projects() {
                         <span>{formatDate(project.updated_at)}</span>
                       </div>
                       <div className="flex gap-2 mt-2">
-                        <Link href={`/config?id=${project.id}`} className="flex-1">
-                          <Button variant="outline" className="w-full border-primary/30 hover:border-primary hover:bg-primary/10">
-                            <Settings className="w-4 h-4 mr-2" />
-                            Config
-                          </Button>
-                        </Link>
-                        <Link href={`/?id=${project.id}`} className="flex-1">
+                        {user && (
+                          <Link href={`/config?id=${project.id}`} className="flex-1">
+                            <Button variant="outline" className="w-full border-primary/30 hover:border-primary hover:bg-primary/10">
+                              <Settings className="w-4 h-4 mr-2" />
+                              Config
+                            </Button>
+                          </Link>
+                        )}
+                        <Link href={`/?id=${project.id}`} className={user ? "flex-1" : "w-full"}>
                           <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                             <Compass className="w-4 h-4 mr-2" />
                             Canlı
