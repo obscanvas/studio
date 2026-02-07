@@ -189,8 +189,8 @@ function ConfigContent() {
               <FilterPanel />
             </div>
 
-            {/* Preview Area (Always present in desktop, primary in mobile) */}
-            <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Preview Area - Hidden on mobile when not active, always visible on desktop */}
+            <div className={`flex-1 flex flex-col overflow-hidden ${activeTab !== 'preview' ? 'hidden lg:flex' : 'flex'}`}>
               {/* Toolbar */}
               <div className="h-10 md:h-12 border-b border-primary/20 bg-card/20 flex items-center justify-between px-3 md:px-4 shrink-0 overflow-x-auto no-scrollbar">
                 <div className="flex items-center gap-2 md:gap-4 shrink-0">
