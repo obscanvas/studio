@@ -89,10 +89,14 @@ export function ProjectProvider({ children }: { children: ReactNode }) {
       : window.location.search.substring(1);
     const params = new URLSearchParams(search);
     const id = params.get('id');
+    const isNew = params.get('new') === 'true';
 
-    if (id) {
+    if (isNew && isConfigPage) {
+      // Yeni proje modu: Temizle
+      loadConfig(""); // Empty string signals reset
+    } else if (id) {
       if (isConfigPage) {
-        // Düzeltme Modu: Sahneyi çek ama projectId setleme (üzerine yazmasın)
+        // Düzeltme Modu: Sahneyi çek
         loadConfig(id);
       } else {
         // İzleme Modu: ID'yi sahiplen

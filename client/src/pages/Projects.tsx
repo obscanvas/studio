@@ -194,10 +194,10 @@ export default function Projects() {
           </div>
 
           <div className="flex items-center gap-2">
-            <Link href="/config">
+            <Link href="/config?new=true">
               <Button size="sm" className="bg-primary text-primary-foreground hover:bg-primary/90">
                 <Settings className="w-4 h-4 mr-2" />
-                Config
+                Yeni Proje
               </Button>
             </Link>
             <Button
