@@ -31,6 +31,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!isMounted) return;
       setSession(nextSession);
       setIsLoading(false);
+
+      // Restore redirect path if exists
+      if (_event === "SIGNED_IN" && nextSession) {
+        const redirectPath = localStorage.getItem("auth_redirect");
+        if (redirectPath) {
+          localStorage.removeItem("auth_redirect");
+          window.location.hash = redirectPath;
+        }
+      }
     });
 
     return () => {
@@ -40,7 +49,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
-    const redirectTo = `${window.location.origin}${window.location.pathname}#/projects`;
+    // Store where we want to go after login (e.g. /projects)
+    // Since we can't use hash in Supabase callback URL, we store it locally
+    localStorage.setItem("auth_redirect", "/projects");
+
+    const redirectTo = `${window.location.origin}${window.location.pathname}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo },
