@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState, useEffect } from 'react';
+import React, { useMemo, useRef, useState, useLayoutEffect } from 'react';
 import { ProjectConfig } from '@/types';
 import { getFilterStyle } from '@/lib/renderUtils';
 
@@ -10,9 +10,9 @@ interface ProjectThumbnailProps {
 export function ProjectThumbnail({ config, className = '' }: ProjectThumbnailProps) {
     const { canvasSize, backgroundColor, layers } = config;
     const containerRef = useRef<HTMLDivElement>(null);
-    const [scale, setScale] = useState(1);
+    const [scale, setScale] = useState(0.001); // Start invisible/tiny to avoid flash
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (!containerRef.current) return;
 
         const updateScale = () => {
@@ -35,7 +35,6 @@ export function ProjectThumbnail({ config, className = '' }: ProjectThumbnailPro
     }, [canvasSize]);
 
     // Render scaling to fit container
-    // Assuming the container is 16:9 or similar, we want to contain the canvas
     const sortedLayers = useMemo(() =>
         [...layers].sort((a, b) => a.zIndex - b.zIndex),
         [layers]
@@ -44,19 +43,24 @@ export function ProjectThumbnail({ config, className = '' }: ProjectThumbnailPro
     return (
         <div
             ref={containerRef}
-            className={`relative w-full h-full overflow-hidden bg-black/50 flex items-center justify-center ${className}`}
+            className={`relative w-full h-full overflow-hidden bg-black/50 ${className}`}
             style={{ backgroundColor }}
         >
-            {/* Scaled Render Container */}
+            {/* Scaled Render Container - Absolute Centered */}
             <div
                 style={{
                     width: canvasSize.width,
                     height: canvasSize.height,
                     transform: `scale(${scale})`,
                     transformOrigin: 'center center',
-                    flexShrink: 0, // Prevent flex compression
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    marginTop: -(canvasSize.height / 2),
+                    marginLeft: -(canvasSize.width / 2),
+                    pointerEvents: 'none', // Thumbnails shouldn't be interactive
                 }}
-                className="relative overflow-hidden shadow-2xl"
+                className="shadow-2xl"
             >
                 {/* Grid Overlay for aesthetic */}
                 <div className="absolute inset-0 cyber-grid opacity-20 pointer-events-none" />
@@ -67,11 +71,11 @@ export function ProjectThumbnail({ config, className = '' }: ProjectThumbnailPro
                     return (
                         <div
                             key={layer.id}
-                            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                            className="absolute inset-0 flex items-center justify-center"
                             style={{ zIndex: layer.zIndex }}
                         >
                             <div
-                                className="relative group pointer-events-auto"
+                                className="relative group"
                                 style={getFilterStyle(layer)}
                             >
                                 {layer.type === 'video' ? (
