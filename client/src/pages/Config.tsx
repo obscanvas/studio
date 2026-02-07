@@ -92,7 +92,7 @@ function ConfigContent() {
       {/* Header - Responsive */}
       <header className="h-14 border-b border-primary/30 bg-card/80 backdrop-blur-sm flex items-center justify-between px-4 shrink-0 z-50 overflow-x-auto no-scrollbar">
         <div className="flex items-center gap-3 shrink-0">
-          <Link href="/projects">
+          <Link href="/projects" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <Button
               variant="ghost"
               size="icon"
@@ -100,13 +100,13 @@ function ConfigContent() {
             >
               <ChevronLeft className="w-5 h-5" />
             </Button>
+            <div className="flex items-center gap-2">
+              <LayersIcon className="w-5 h-5 md:w-6 md:h-6 text-primary" />
+              <h1 className="font-display text-sm md:text-lg tracking-wider text-primary truncate max-w-[120px] md:max-w-none">
+                OBS STUDIO
+              </h1>
+            </div>
           </Link>
-          <div className="flex items-center gap-2">
-            <LayersIcon className="w-5 h-5 md:w-6 md:h-6 text-primary" />
-            <h1 className="font-display text-sm md:text-lg tracking-wider text-primary truncate max-w-[120px] md:max-w-none">
-              OBS STUDIO
-            </h1>
-          </div>
           <span className="hidden xs:inline-block text-[10px] md:text-xs font-tech text-muted-foreground px-2 py-0.5 bg-secondary rounded border border-primary/20">
             CONFIG
           </span>
