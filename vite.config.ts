@@ -75,7 +75,7 @@ function apiPlugin(): Plugin {
 }
 
 export default defineConfig({
-  base: './',
+  base: '/studio/',
   plugins: [
     apiPlugin(), // API plugin'i en başta
     react(),
