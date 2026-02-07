@@ -22,6 +22,7 @@ import {
 import { Image, Film, FileImage, Upload, Link, AlertCircle, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadToCloudinary } from '@/lib/cloudinary';
+import { convertToWebP } from '@/lib/imageUtils';
 
 interface AddMediaDialogProps {
   open: boolean;
@@ -116,6 +117,22 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
     if (selectedFile) {
       setIsLoading(true);
 
+      // WebP Dönüşümü
+      let fileToUpload: File | Blob = selectedFile;
+
+      // Sadece resimse ve GIF değilse WebP'ye çevir
+      if (selectedFile.type.startsWith('image/') && selectedFile.type !== 'image/gif') {
+        try {
+          console.log("WebP dönüşümü yapılıyor...");
+          const webpBlob = await convertToWebP(selectedFile, 0.80);
+          fileToUpload = webpBlob;
+          console.log(`WebP dönüşümü tamamlandı. Orijinal: ${selectedFile.size} bytes, WebP: ${webpBlob.size} bytes`);
+        } catch (e) {
+          console.error("WebP conversion failed, uploading original:", e);
+          // Hata olursa orijinal dosyayı kullanmaya devam eder
+        }
+      }
+
       // Env değişkenlerini component seviyesinde okuyup gönderelim
       // Eğer env yüklenemezse (restart gerekebilir), hardcoded fallback kullanalım
       const cloudconfig = {
@@ -123,7 +140,7 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
         uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "obs-web-studio",
       };
 
-      const uploadedUrl = await uploadToCloudinary(selectedFile, cloudconfig);
+      const uploadedUrl = await uploadToCloudinary(fileToUpload, cloudconfig);
 
       if (uploadedUrl) {
         finalSource = uploadedUrl;
