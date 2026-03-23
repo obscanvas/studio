@@ -16,7 +16,7 @@ interface ShareDialogProps {
     isOpen: boolean;
     onClose: () => void;
     currentIsPublic: boolean;
-    onShare: (isPublic: boolean) => Promise<string | null>;
+    onShare: (isPublic: boolean, onUploadProgress?: (uploaded: number, total: number) => void) => Promise<string | null>;
 }
 
 export function ShareDialog({
@@ -30,12 +30,17 @@ export function ShareDialog({
     const [generatedLink, setGeneratedLink] = useState<string | null>(null);
     const [copied, setCopied] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [uploadProgress, setUploadProgress] = useState<{ uploaded: number; total: number } | null>(null);
 
     const handleShare = async () => {
         setIsSharing(true);
         setError(null);
+        setUploadProgress(null);
         try {
-            const link = await onShare(isPublic);
+            const link = await onShare(isPublic, (uploaded, total) => {
+                setUploadProgress({ uploaded, total });
+            });
+            setUploadProgress(null);
             if (link) {
                 setGeneratedLink(link);
                 try {
@@ -52,6 +57,7 @@ export function ShareDialog({
             setError(`Hata: ${(e as Error).message}`);
         } finally {
             setIsSharing(false);
+            setUploadProgress(null);
         }
     };
 
@@ -70,6 +76,7 @@ export function ShareDialog({
         setGeneratedLink(null);
         setError(null);
         setCopied(false);
+        setUploadProgress(null);
         onClose();
     };
 
@@ -186,7 +193,9 @@ export function ShareDialog({
                                 {isSharing ? (
                                     <>
                                         <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin mr-2" />
-                                        Oluşturuluyor...
+                                        {uploadProgress
+                                            ? `Yükleniyor (${uploadProgress.uploaded}/${uploadProgress.total})...`
+                                            : 'Oluşturuluyor...'}
                                     </>
                                 ) : (
                                     <>

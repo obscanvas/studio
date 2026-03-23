@@ -182,8 +182,8 @@ export function ConfigActions() {
         isOpen={shareDialogOpen}
         onClose={() => setShareDialogOpen(false)}
         currentIsPublic={config.isPublic}
-        onShare={async (isPublic) => {
-          return await shareProject(isPublic);
+        onShare={async (isPublic, onUploadProgress) => {
+          return await shareProject(isPublic, onUploadProgress);
         }}
       />
     </>

@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { minifyConfig, expandConfig } from "@/lib/compression";
+import { uploadToCloudinary } from "@/lib/cloudinary";
+import { convertToWebP } from "@/lib/imageUtils";
 import { DEFAULT_FILTERS, DEFAULT_PROJECT_CONFIG, Layer, ProjectConfig } from "@/types";
 
 const STORAGE_KEY = "obs_web_studio_last_config";
@@ -62,10 +64,15 @@ export function useStorage(
       return;
     }
 
+    const cloudConfig = {
+      ...config,
+      layers: config.layers.filter(l => !l.source.startsWith("data:")),
+    };
+
     if (!projectId) {
       const newId = nanoid(10);
       const now = new Date().toISOString();
-      const configWithDate = { ...config, lastModified: now };
+      const configWithDate = { ...cloudConfig, lastModified: now };
       const minifiedToSave = minifyConfig(configWithDate);
 
       try {
@@ -78,7 +85,7 @@ export function useStorage(
         });
 
         setProjectId(newId);
-        setConfig(configWithDate);
+        setConfig(prev => ({ ...prev, lastModified: now }));
         localStorage.setItem(ID_KEY, newId);
 
         const currentUrl = new URL(window.location.href);
@@ -95,7 +102,7 @@ export function useStorage(
     }
 
     const now = new Date().toISOString();
-    const configToSave = { ...config, lastModified: now };
+    const configToSave = { ...cloudConfig, lastModified: now };
     const minifiedToUpdate = minifyConfig(configToSave);
 
     try {
@@ -187,7 +194,10 @@ export function useStorage(
     [projectId, setConfig, setIsLoading, setProjectId]
   );
 
-  const shareProject = useCallback(async (isPublic: boolean): Promise<string | null> => {
+  const shareProject = useCallback(async (
+    isPublic: boolean,
+    onUploadProgress?: (uploaded: number, total: number) => void,
+  ): Promise<string | null> => {
     try {
       const userId = auth.currentUser?.uid;
       console.log("[share] userId:", userId, "projectId:", projectId);
@@ -204,9 +214,48 @@ export function useStorage(
         return null;
       }
 
+      const cloudconfig = {
+        cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dfkldtgxj",
+        uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "obs-web-studio",
+      };
+
+      const base64Layers = config.layers.filter(l => l.source.startsWith("data:"));
+      const totalToUpload = base64Layers.length;
+      let uploadedCount = 0;
+      const updatedLayers = [...config.layers];
+
+      for (const layer of base64Layers) {
+        const idx = updatedLayers.findIndex(l => l.id === layer.id);
+        if (idx === -1) continue;
+
+        const blob = await fetch(layer.source).then(r => r.blob());
+
+        let fileToUpload: Blob = blob;
+        if (blob.type.startsWith("image/") && blob.type !== "image/gif") {
+          try {
+            fileToUpload = await convertToWebP(new File([blob], "image", { type: blob.type }), 0.80);
+          } catch {
+            // WebP donusumu basarisiz olursa orijinal blob ile devam et
+          }
+        }
+
+        const uploadedUrl = await uploadToCloudinary(fileToUpload, cloudconfig);
+        if (uploadedUrl) {
+          updatedLayers[idx] = { ...updatedLayers[idx], source: uploadedUrl };
+        } else {
+          toast.error(`"${layer.name}" yüklenemedi, paylaşım iptal edildi.`);
+          return null;
+        }
+
+        uploadedCount++;
+        onUploadProgress?.(uploadedCount, totalToUpload);
+      }
+
+      const configWithUploadedLayers = { ...config, layers: updatedLayers };
+
       const updatedConfig = normalizeProjectConfig(
         {
-          ...config,
+          ...configWithUploadedLayers,
           isPublic,
           lastModified: new Date().toISOString(),
         },

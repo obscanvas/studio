@@ -19,10 +19,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Image, Film, FileImage, Upload, Link, AlertCircle, Loader2 } from 'lucide-react';
+import { Image, Film, FileImage, Upload, Link } from 'lucide-react';
 import { toast } from 'sonner';
-import { uploadToCloudinary } from '@/lib/cloudinary';
-import { convertToWebP } from '@/lib/imageUtils';
 
 interface AddMediaDialogProps {
   open: boolean;
@@ -35,7 +33,6 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
   const [mediaUrl, setMediaUrl] = useState('');
   const [mediaType, setMediaType] = useState<MediaType>('image');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,7 +41,6 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
     setMediaUrl('');
     setPreviewUrl(null);
     setSelectedFile(null);
-    setIsLoading(false);
   };
 
   const handleClose = () => {
@@ -113,47 +109,8 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
   const handleAddLayer = async () => {
     let finalSource = mediaUrl;
 
-    // Dosya seçilmişse önce Cloudinary'ye yükle
-    if (selectedFile) {
-      setIsLoading(true);
-
-      // WebP Dönüşümü
-      let fileToUpload: File | Blob = selectedFile;
-
-      // Sadece resimse ve GIF değilse WebP'ye çevir
-      if (selectedFile.type.startsWith('image/') && selectedFile.type !== 'image/gif') {
-        try {
-          const webpBlob = await convertToWebP(selectedFile, 0.80);
-          fileToUpload = webpBlob;
-        } catch (e) {
-          // Hata olursa orijinal dosyayı kullanmaya devam eder
-        }
-      }
-
-      // Env değişkenlerini component seviyesinde okuyup gönderelim
-      // Eğer env yüklenemezse (restart gerekebilir), hardcoded fallback kullanalım
-      const cloudconfig = {
-        cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME || "dfkldtgxj",
-        uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET || "obs-web-studio",
-      };
-
-      const uploadedUrl = await uploadToCloudinary(fileToUpload, cloudconfig);
-
-      if (uploadedUrl) {
-        finalSource = uploadedUrl;
-        toast.success("Dosya buluta yüklendi");
-      } else {
-        // Yükleme başarısız olursa kullanıcıya sorulabilir veya hata verilebilir.
-        // Şimdilik uyarı verip base64 (previewUrl) kullanmaya izin verelim ama uyaralım.
-        const useBase64 = confirm("Bulut yüklemesi başarısız oldu. Yine de Base64 olarak eklemek ister misiniz? (Bu veritabanını şişirebilir)");
-        if (useBase64 && previewUrl) {
-          finalSource = previewUrl;
-        } else {
-          setIsLoading(false);
-          return;
-        }
-      }
-      setIsLoading(false);
+    if (selectedFile && previewUrl) {
+      finalSource = previewUrl;
     }
 
     if (!finalSource) {
@@ -230,7 +187,7 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
             <TabsContent value="upload" className="mt-4">
               <div
                 className="border-2 border-dashed border-primary/30 rounded-lg p-6 md:p-8 text-center cursor-pointer hover:border-primary/60 hover:bg-primary/5 transition-colors relative"
-                onClick={() => !isLoading && fileInputRef.current?.click()}
+                onClick={() => fileInputRef.current?.click()}
               >
                 <input
                   ref={fileInputRef}
@@ -238,25 +195,15 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
                   accept="image/*,video/*"
                   onChange={handleFileSelect}
                   className="hidden"
-                  disabled={isLoading}
                 />
 
-                {isLoading ? (
-                  <div className="flex flex-col items-center justify-center py-4">
-                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-2" />
-                    <p className="text-sm text-primary">Buluta Yükleniyor...</p>
-                  </div>
-                ) : (
-                  <>
-                    <Upload className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4 text-primary/50" />
-                    <p className="text-sm text-muted-foreground">
-                      Dosya seçmek için tıklayın veya sürükleyin
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-2">
-                      PNG, JPG, GIF, MP4, WEBM desteklenir
-                    </p>
-                  </>
-                )}
+                <Upload className="w-10 h-10 md:w-12 md:h-12 mx-auto mb-4 text-primary/50" />
+                <p className="text-sm text-muted-foreground">
+                  Dosya seçmek için tıklayın veya sürükleyin
+                </p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  PNG, JPG, GIF, MP4, WEBM desteklenir
+                </p>
               </div>
             </TabsContent>
 
@@ -324,32 +271,12 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
                   />
                 )}
 
-                {/* Bulut Durumu */}
-                {selectedFile && !isLoading && (
-                  <div className="absolute bottom-2 right-2 bg-yellow-500/90 text-black px-2 py-1 rounded text-[10px] font-bold">
-                    YÜKLENMEDİ (Yerel)
-                  </div>
-                )}
-
                 {/* Medya Türü Etiketi */}
                 <div className="absolute top-2 right-2 bg-background/80 px-2 py-1 rounded text-xs font-tech flex items-center gap-1">
                   {getMediaIcon(mediaType)}
                   <span className="uppercase">{mediaType}</span>
                 </div>
               </div>
-            </div>
-          )}
-
-          {/* Uyarı */}
-          {previewUrl && previewUrl.startsWith('data:') && (
-            <div className="flex items-start gap-2 p-3 bg-accent/10 rounded border border-accent/30 text-sm">
-              <AlertCircle className="w-4 h-4 text-accent mt-0.5 flex-shrink-0" />
-              <p className="text-muted-foreground">
-                {selectedFile
-                  ? "Dosya 'Katman Ekle' butonuna basıldığında Cloudinary'ye yüklenecektir."
-                  : "Base64 veri tespit edildi. Bu büyük veriler veritabanını yavaşlatabilir."
-                }
-              </p>
             </div>
           )}
         </div>
@@ -359,27 +286,17 @@ export function AddMediaDialog({ open, onOpenChange }: AddMediaDialogProps) {
           <Button
             variant="outline"
             onClick={handleClose}
-            disabled={isLoading}
             className="border-primary/30 hover:border-primary hover:bg-primary/10"
           >
             İptal
           </Button>
           <Button
             onClick={handleAddLayer}
-            disabled={(!mediaUrl && !selectedFile) || isLoading}
+            disabled={!mediaUrl && !selectedFile}
             className="bg-primary text-primary-foreground hover:bg-primary/90 min-w-[120px]"
           >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Yükleniyor...
-              </>
-            ) : (
-              <>
-                <Upload className="w-4 h-4 mr-2" />
-                Katman Ekle
-              </>
-            )}
+            <Upload className="w-4 h-4 mr-2" />
+            Katman Ekle
           </Button>
         </div>
       </DialogContent>
