@@ -187,9 +187,17 @@ export function useStorage(
     [projectId, setConfig, setIsLoading, setProjectId]
   );
 
+  const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+    const timeout = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout (${ms}ms): ${label}`)), ms)
+    );
+    return Promise.race([promise, timeout]);
+  };
+
   const shareProject = async (isPublic: boolean): Promise<string | null> => {
     try {
       const userId = auth.currentUser?.uid;
+      console.log("[share] userId:", userId, "projectId:", projectId);
 
       if (!userId) {
         toast.error("Paylasim icin giris yapmalisiniz");
@@ -209,37 +217,49 @@ export function useStorage(
 
       if (projectId) {
         const now = new Date().toISOString();
+        console.log("[share] Updating existing doc:", projectId);
 
         try {
-          await updateDoc(doc(db, "scenes", projectId), {
-            config: minifiedConfig,
-            is_public: isPublic,
-            updated_at: now,
-          });
+          await withTimeout(
+            updateDoc(doc(db, "scenes", projectId), {
+              config: minifiedConfig,
+              is_public: isPublic,
+              updated_at: now,
+            }),
+            8000,
+            "updateDoc"
+          );
 
           setConfig(updatedConfig);
           localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
           localStorage.setItem(ID_KEY, projectId);
 
-          return `${window.location.origin}${window.location.pathname}#/?id=${projectId}`;
+          const link = `${window.location.origin}${window.location.pathname}#/?id=${projectId}`;
+          console.log("[share] Success! Link:", link);
+          return link;
         } catch (error) {
-          console.error("Share error:", error);
-          toast.error("Paylasim linki guncellenemedi");
+          console.error("[share] updateDoc error:", error);
+          toast.error(`Paylasim hatasi: ${(error as Error).message}`);
           return null;
         }
       }
 
       const newId = nanoid(10);
       const now = new Date().toISOString();
+      console.log("[share] Creating new doc:", newId);
 
       try {
-        await setDoc(doc(db, "scenes", newId), {
-          user_id: userId,
-          is_public: isPublic,
-          config: minifiedConfig,
-          created_at: now,
-          updated_at: now,
-        });
+        await withTimeout(
+          setDoc(doc(db, "scenes", newId), {
+            user_id: userId,
+            is_public: isPublic,
+            config: minifiedConfig,
+            created_at: now,
+            updated_at: now,
+          }),
+          8000,
+          "setDoc"
+        );
 
         setProjectId(newId);
         setConfig(updatedConfig);
@@ -250,15 +270,17 @@ export function useStorage(
         currentUrl.hash = `/config?id=${newId}`;
         window.history.replaceState({}, "", currentUrl.toString());
 
-        return `${window.location.origin}${window.location.pathname}#/?id=${newId}`;
+        const link = `${window.location.origin}${window.location.pathname}#/?id=${newId}`;
+        console.log("[share] Success! Link:", link);
+        return link;
       } catch (error) {
-        console.error("Share error:", error);
-        toast.error("Paylasim linki olusturulamadi");
+        console.error("[share] setDoc error:", error);
+        toast.error(`Paylasim hatasi: ${(error as Error).message}`);
         return null;
       }
     } catch (error) {
-      console.error("Share exception:", error);
-      toast.error("Bir hata olustu");
+      console.error("[share] Exception:", error);
+      toast.error(`Hata: ${(error as Error).message}`);
       return null;
     }
   };
