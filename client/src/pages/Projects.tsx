@@ -100,48 +100,52 @@ export default function Projects() {
     setIsLoading(true);
     try {
       const scenesRef = collection(db, "scenes");
+      const allRows: SceneRow[] = [];
+      const seenIds = new Set<string>();
 
-      let q;
-      if (!user) {
-        q = query(
+      if (user) {
+        const myQuery = query(
           scenesRef,
-          where("is_public", "==", true),
+          where("user_id", "==", user.uid),
           orderBy("updated_at", "desc"),
           limit(100)
         );
-      } else {
-        q = query(
-          scenesRef,
-          orderBy("updated_at", "desc"),
-          limit(100)
-        );
+        try {
+          const mySnap = await getDocs(myQuery);
+          for (const docSnap of mySnap.docs) {
+            const row = docSnap.data();
+            const config = normalizeConfig(row.config);
+            const ownerId = typeof row.user_id === "string" ? row.user_id : null;
+            const isPublic = typeof row.is_public === "boolean" ? row.is_public : Boolean(config.isPublic);
+            allRows.push({ id: docSnap.id, config: { ...config, isPublic }, isPublic, ownerId, created_at: row.created_at ?? null, updated_at: row.updated_at ?? null });
+            seenIds.add(docSnap.id);
+          }
+        } catch (e) {
+          console.error("Failed to load my projects:", e);
+        }
       }
 
-      const snapshot = await getDocs(q);
+      const publicQuery = query(
+        scenesRef,
+        where("is_public", "==", true),
+        orderBy("updated_at", "desc"),
+        limit(100)
+      );
+      try {
+        const publicSnap = await getDocs(publicQuery);
+        for (const docSnap of publicSnap.docs) {
+          if (seenIds.has(docSnap.id)) continue;
+          const row = docSnap.data();
+          const config = normalizeConfig(row.config);
+          const ownerId = typeof row.user_id === "string" ? row.user_id : null;
+          const isPublic = typeof row.is_public === "boolean" ? row.is_public : Boolean(config.isPublic);
+          allRows.push({ id: docSnap.id, config: { ...config, isPublic }, isPublic, ownerId, created_at: row.created_at ?? null, updated_at: row.updated_at ?? null });
+        }
+      } catch (e) {
+        console.error("Failed to load public projects:", e);
+      }
 
-      const rows: SceneRow[] = snapshot.docs.map((docSnap) => {
-        const row = docSnap.data();
-        const config = normalizeConfig(row.config);
-        const ownerId =
-          typeof row.user_id === "string"
-            ? row.user_id
-            : typeof config.ownerId === "string"
-              ? config.ownerId
-              : null;
-        const isPublic =
-          typeof row.is_public === "boolean" ? row.is_public : Boolean(config.isPublic);
-
-        return {
-          id: docSnap.id,
-          config: { ...config, isPublic },
-          isPublic,
-          ownerId,
-          created_at: row.created_at ?? null,
-          updated_at: row.updated_at ?? null,
-        };
-      });
-
-      setProjects(rows);
+      setProjects(allRows);
     } catch (error) {
       console.error("Failed to load projects:", error);
       toast.error("Projeler yuklenemedi");
