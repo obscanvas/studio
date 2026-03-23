@@ -2,7 +2,7 @@ import { useCallback } from "react";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
 import { auth, db } from "@/lib/firebase";
-import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
 import { minifyConfig, expandConfig } from "@/lib/compression";
 import { DEFAULT_FILTERS, DEFAULT_PROJECT_CONFIG, Layer, ProjectConfig } from "@/types";
 
@@ -187,20 +187,20 @@ export function useStorage(
     [projectId, setConfig, setIsLoading, setProjectId]
   );
 
-  const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error(`Timeout (${ms}ms): ${label}`)), ms)
-    );
-    return Promise.race([promise, timeout]);
-  };
-
-  const shareProject = async (isPublic: boolean): Promise<string | null> => {
+  const shareProject = useCallback(async (isPublic: boolean): Promise<string | null> => {
     try {
       const userId = auth.currentUser?.uid;
       console.log("[share] userId:", userId, "projectId:", projectId);
 
       if (!userId) {
-        toast.error("Paylasim icin giris yapmalisiniz");
+        toast.error("Paylaşım için giriş yapmalısınız");
+        return null;
+      }
+
+      const firebaseProjectId = db.app.options.projectId;
+      if (!firebaseProjectId) {
+        console.error("[share] Firebase projectId is missing");
+        toast.error("Firebase yapılandırması eksik. Bulut kaydetme devre dışı.");
         return null;
       }
 
@@ -214,6 +214,13 @@ export function useStorage(
       );
 
       const minifiedConfig = minifyConfig(updatedConfig);
+
+      const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error(`Zaman aşımı (${ms}ms): ${label}`)), ms)
+        );
+        return Promise.race([promise, timeout]);
+      };
 
       if (projectId) {
         const now = new Date().toISOString();
@@ -239,7 +246,7 @@ export function useStorage(
           return link;
         } catch (error) {
           console.error("[share] updateDoc error:", error);
-          toast.error(`Paylasim hatasi: ${(error as Error).message}`);
+          toast.error(`Paylaşım hatası: ${(error as Error).message}`);
           return null;
         }
       }
@@ -261,6 +268,8 @@ export function useStorage(
           "setDoc"
         );
 
+        console.log("[share] setDoc completed, updating local state...");
+
         setProjectId(newId);
         setConfig(updatedConfig);
         localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
@@ -275,7 +284,7 @@ export function useStorage(
         return link;
       } catch (error) {
         console.error("[share] setDoc error:", error);
-        toast.error(`Paylasim hatasi: ${(error as Error).message}`);
+        toast.error(`Paylaşım hatası: ${(error as Error).message}`);
         return null;
       }
     } catch (error) {
@@ -283,7 +292,7 @@ export function useStorage(
       toast.error(`Hata: ${(error as Error).message}`);
       return null;
     }
-  };
+  }, [config, projectId, setConfig, setProjectId]);
 
   return {
     saveConfig,

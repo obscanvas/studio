@@ -183,11 +183,7 @@ export function ConfigActions() {
         onClose={() => setShareDialogOpen(false)}
         currentIsPublic={config.isPublic}
         onShare={async (isPublic) => {
-          const link = await shareProject(isPublic);
-          if (link) {
-            navigator.clipboard.writeText(link);
-            toast.success('Paylaşım linki kopyalandı!');
-          }
+          return await shareProject(isPublic);
         }}
       />
     </>

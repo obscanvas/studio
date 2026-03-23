@@ -91,6 +91,7 @@ jspm_packages/
 
 # Gatsby files
 .cache/
+.agents/
 
 # Storybook build outputs
 .out
