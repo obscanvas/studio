@@ -1,19 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Layers, RefreshCw } from "lucide-react";
 import { useLocation } from "wouter";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/firebase";
+import { doc, getDoc } from "firebase/firestore";
 import { useAuth } from "@/contexts/AuthContext";
 import { DEFAULT_FILTERS, DEFAULT_PROJECT_CONFIG, Layer, ProjectConfig } from "@/types";
 import { InfiniteScroll } from "@/components/ui/InfiniteScroll";
 import { getFilterStyle } from "@/lib/renderUtils";
 
 import { expandConfig } from "@/lib/compression";
-
-const isAccessColumnError = (error: unknown): boolean => {
-  if (!error || typeof error !== "object") return false;
-  const message = String((error as { message?: string }).message ?? "");
-  return message.includes("is_public") || message.includes("user_id");
-};
 
 const normalizeProjectConfig = (
   raw: unknown,
@@ -47,7 +42,6 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Helper to extract ID from URL (hash or query)
   const getProjectIdFromUrl = useCallback(() => {
     const hash = window.location.hash;
     const search = hash.includes("?") ? hash.split("?")[1] : window.location.search.substring(1);
@@ -55,15 +49,12 @@ export default function Home() {
     return params.get("id");
   }, []);
 
-  // Redirect logic based on auth and URL params
   useEffect(() => {
     if (isAuthLoading) return;
 
     const id = getProjectIdFromUrl();
 
-    // Only redirect to dashboard if NO ID is present (landing page behavior)
     if (!id) {
-      // If main page without ID, go to dashboard/projects
       setLocation("/projects");
     }
   }, [user, isAuthLoading, setLocation, getProjectIdFromUrl]);
@@ -75,45 +66,22 @@ export default function Home() {
       const id = getProjectIdFromUrl();
 
       if (id) {
-        // 1. Try fetching with is_public (newer schema)
-        const { data: mainData, error: mainError } = await supabase
-          .from("scenes")
-          .select("config, is_public")
-          .eq("id", id)
-          .single();
+        const sceneRef = doc(db, "scenes", id);
+        const snap = await getDoc(sceneRef);
 
-        if (!mainError && mainData) {
-          const expandedConfig = expandConfig(mainData.config);
-          setConfig(normalizeProjectConfig(expandedConfig, mainData.is_public ?? undefined));
+        if (snap.exists()) {
+          const data = snap.data();
+          const expandedConfig = expandConfig(data.config);
+          setConfig(normalizeProjectConfig(expandedConfig, data.is_public ?? undefined));
           setIsLoading(false);
           return;
         }
 
-        // 2. Fallback: If error (any error, e.g. column missing, RLS), try selecting just config
-        // This handles cases where 'is_public' column might not exist or be accessible
-        const { data: legacyData, error: legacyError } = await supabase
-          .from("scenes")
-          .select("config")
-          .eq("id", id)
-          .single();
-
-        if (legacyData) {
-          // If we got data here, it means we can read the config. 
-          // We assume it's public enough to read if RLS didn't block it.
-          const expandedConfig = expandConfig(legacyData.config);
-          setConfig(normalizeProjectConfig(expandedConfig, true));
-          setIsLoading(false);
-          return;
-        }
-
-        // 3. If both failed, show error
-        console.error("Config load failed:", mainError, legacyError);
-        setError("Proje bulunamadı veya erişim izniniz yok.");
+        setError("Proje bulunamadi veya erisim izniniz yok.");
         setIsLoading(false);
         return;
       }
 
-      // Local dev / No ID handling
       if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
         const response = await fetch("/api/config");
         if (response.ok) {
@@ -126,13 +94,11 @@ export default function Home() {
         }
       }
 
-      // If no ID and not local dev, we are just on the landing page (which handled redirect in useEffect)
-      // So we can stop loading.
       setIsLoading(false);
 
     } catch (error) {
       console.error("Critical load error:", error);
-      setError("Beklenmeyen bir hata oluştu.");
+      setError("Beklenmeyen bir hata olustu.");
       setIsLoading(false);
     }
   }, [getProjectIdFromUrl]);
@@ -159,23 +125,20 @@ export default function Home() {
     [config.layers]
   );
 
-  // Mobil için responsive scale hesapla
   const canvasScale = useMemo(() => {
     const { width: canvasW, height: canvasH } = config.canvasSize;
     const { width: windowW, height: windowH } = windowSize;
 
     if (windowW === 0 || windowH === 0) return 1;
 
-    // Mobilde veya küçük ekranlarda canvas'ı viewport içine sığdır
-    const padding = 20; // px
+    const padding = 20;
     const availableWidth = windowW - padding * 2;
     const availableHeight = windowH - padding * 2;
 
     const scaleX = availableWidth / canvasW;
     const scaleY = availableHeight / canvasH;
 
-    // En küçük scale'i kullan (aspect ratio korunsun)
-    const scale = Math.min(scaleX, scaleY, 1); // Max 1.0 (zoom yapmayalım)
+    const scale = Math.min(scaleX, scaleY, 1);
 
     return scale;
   }, [config.canvasSize, windowSize]);
@@ -188,7 +151,6 @@ export default function Home() {
 
     const positions: { x: number; y: number; isMain: boolean }[] = [];
 
-    // Scaled canvas dimensions
     const scaledW = canvasW * canvasScale;
     const scaledH = canvasH * canvasScale;
 
@@ -293,7 +255,7 @@ export default function Home() {
             <p className="text-lg font-bold text-red-500 mb-2">Hata</p>
             <p className="text-sm opacity-80">{error}</p>
             <div className="mt-4 text-xs text-gray-500">
-              Login gerekmeden yayın görüntülemek için <a href="/#/projects" className="text-primary hover:underline">ana sayfaya</a> gidebilirsiniz.
+              Login gerekmeden yayin goruntelemek icin <a href="/#/projects" className="text-primary hover:underline">ana sayfaya</a> gidebilirsiniz.
             </div>
           </div>
         </div>
@@ -329,4 +291,3 @@ export default function Home() {
     </div>
   );
 }
-

@@ -16,7 +16,17 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/lib/supabase";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  limit,
+  getDocs,
+  deleteDoc,
+  doc,
+} from "firebase/firestore";
 import { DEFAULT_PROJECT_CONFIG, ProjectConfig } from "@/types";
 import { expandConfig } from "@/lib/compression";
 import {
@@ -44,18 +54,11 @@ interface SceneRow {
 
 const LOCAL_ID_KEY = "obs_web_studio_last_id";
 
-const isAccessColumnError = (error: unknown): boolean => {
-  if (!error || typeof error !== "object") return false;
-  const message = String((error as { message?: string }).message ?? "");
-  return message.includes("is_public") || message.includes("user_id");
-};
-
 const normalizeConfig = (raw: unknown): SceneConfig => {
   if (!raw || typeof raw !== "object") {
     return { ...DEFAULT_PROJECT_CONFIG };
   }
 
-  // Minified datayı expand et
   const expanded = expandConfig(raw);
 
   const parsed = expanded as Partial<SceneConfig>;
@@ -80,12 +83,11 @@ export default function Projects() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSigningOut, setIsSigningOut] = useState(false);
   const [localProjectId, setLocalProjectId] = useState<string | null>(null);
-  const userEmail = user?.email ?? "Misafir Kullanıcı";
+  const userEmail = user?.email ?? "Misafir Kullanici";
 
   useEffect(() => {
     setLocalProjectId(localStorage.getItem(LOCAL_ID_KEY));
 
-    // Clean up URL parameters
     const currentUrl = new URL(window.location.href);
     if (currentUrl.searchParams.has("id") || currentUrl.searchParams.has("new")) {
       currentUrl.searchParams.delete("id");
@@ -94,56 +96,31 @@ export default function Projects() {
     }
   }, []);
 
-  // Remove mandatory login redirect
-  // useEffect(() => {
-  //   if (!isAuthLoading && !user) {
-  //     setLocation("/login");
-  //   }
-  // }, [isAuthLoading, setLocation, user]);
-
   const loadProjects = useCallback(async () => {
-    // if (!user) return; // Allow loading for guests
-
     setIsLoading(true);
     try {
-      let rowsSource: any[] = [];
+      const scenesRef = collection(db, "scenes");
 
-      // If user is logged in, fetch as before (all access). 
-      // If guest, fetch only public projects.
-      let query = supabase
-        .from("scenes")
-        .select("id, config, is_public, user_id, created_at, updated_at")
-        .order("updated_at", { ascending: false })
-        .limit(100);
-
+      let q;
       if (!user) {
-        query = query.eq("is_public", true);
-      }
-
-      const withAccess = await query;
-
-      if (withAccess.error) {
-        if (!isAccessColumnError(withAccess.error)) {
-          throw withAccess.error;
-        }
-
-        // Fallback for legacy schema (if applicable, though unnecessary for guests usually)
-        const legacy = await supabase
-          .from("scenes")
-          .select("id, config, created_at, updated_at")
-          .order("updated_at", { ascending: false })
-          .limit(100);
-
-        if (legacy.error) {
-          throw legacy.error;
-        }
-
-        rowsSource = legacy.data ?? [];
+        q = query(
+          scenesRef,
+          where("is_public", "==", true),
+          orderBy("updated_at", "desc"),
+          limit(100)
+        );
       } else {
-        rowsSource = withAccess.data ?? [];
+        q = query(
+          scenesRef,
+          orderBy("updated_at", "desc"),
+          limit(100)
+        );
       }
 
-      const rows: SceneRow[] = rowsSource.map((row) => {
+      const snapshot = await getDocs(q);
+
+      const rows: SceneRow[] = snapshot.docs.map((docSnap) => {
+        const row = docSnap.data();
         const config = normalizeConfig(row.config);
         const ownerId =
           typeof row.user_id === "string"
@@ -155,7 +132,7 @@ export default function Projects() {
           typeof row.is_public === "boolean" ? row.is_public : Boolean(config.isPublic);
 
         return {
-          id: String(row.id),
+          id: docSnap.id,
           config: { ...config, isPublic },
           isPublic,
           ownerId,
@@ -180,8 +157,7 @@ export default function Projects() {
 
   const handleDeleteProject = async (id: string) => {
     try {
-      const { error } = await supabase.from("scenes").delete().eq("id", id);
-      if (error) throw error;
+      await deleteDoc(doc(db, "scenes", id));
 
       setProjects(prev => prev.filter(p => p.id !== id));
       toast.success("Proje silindi");
@@ -200,7 +176,7 @@ export default function Projects() {
     if (!user) return [];
     return projects.filter((project) => {
       if (project.ownerId) {
-        return project.ownerId === user.id;
+        return project.ownerId === user.uid;
       }
       return project.id === localProjectId;
     });
@@ -208,11 +184,9 @@ export default function Projects() {
 
   const myProjectIds = useMemo(() => new Set(myProjects.map((project) => project.id)), [myProjects]);
 
-  // For guests, show all fetched projects (which are already filtered by is_public=true in query)
-  // For users, show public projects that are NOT theirs (exploration)
   const exploreProjects = useMemo(
     () => {
-      if (!user) return projects; // API already filtered for public
+      if (!user) return projects;
       return projects.filter((project) => project.isPublic && !myProjectIds.has(project.id));
     },
     [myProjectIds, projects, user]
@@ -239,7 +213,6 @@ export default function Projects() {
     );
   }
 
-  // Default tab based on auth status
   const defaultTab = user ? "mine" : "explore";
 
   return (
@@ -291,7 +264,7 @@ export default function Projects() {
                   size="sm"
                   className="border-primary/30 hover:border-primary"
                 >
-                  Giriş Yap
+                  Giris Yap
                 </Button>
               </Link>
             )}
@@ -327,12 +300,11 @@ export default function Projects() {
                 <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
                   {myProjects.map((project) => (
                     <Card key={project.id} className="cyber-panel bg-card/50 border-primary/20 overflow-hidden flex flex-col">
-                      {/* Thumbnail Area */}
                       <div className="aspect-video w-full border-b border-primary/10 relative group">
                         <ProjectThumbnail config={project.config} />
                         <Link href={`/config?id=${project.id}`}>
                           <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                            <Button variant="secondary" size="sm">Düzenle</Button>
+                            <Button variant="secondary" size="sm">Duzenle</Button>
                           </div>
                         </Link>
                       </div>
@@ -355,11 +327,11 @@ export default function Projects() {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Projeyi Sil?</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Bu işlem geri alınamaz. "{project.config.name}" projesi kalıcı olarak silinecek.
+                                  Bu islem geri alinamaz. "{project.config.name}" projesi kalici olarak silinecek.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel>İptal</AlertDialogCancel>
+                                <AlertDialogCancel>Iptal</AlertDialogCancel>
                                 <AlertDialogAction onClick={() => handleDeleteProject(project.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
                                   Sil
                                 </AlertDialogAction>
@@ -407,7 +379,7 @@ export default function Projects() {
                       <ProjectThumbnail config={project.config} />
                       <Link href={`/?id=${project.id}`}>
                         <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer">
-                          <Button variant="secondary" size="sm">Yayında Gör</Button>
+                          <Button variant="secondary" size="sm">Yayinda Gor</Button>
                         </div>
                       </Link>
                     </div>
@@ -440,7 +412,7 @@ export default function Projects() {
                         <Link href={`/?id=${project.id}`} className={user ? "flex-1" : "w-full"}>
                           <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
                             <Compass className="w-4 h-4 mr-2" />
-                            Canlı
+                            Canli
                           </Button>
                         </Link>
                       </div>
@@ -455,4 +427,3 @@ export default function Projects() {
     </div>
   );
 }
-

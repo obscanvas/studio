@@ -1,19 +1,13 @@
 import { useCallback } from "react";
 import { nanoid } from "nanoid";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
-import { convertToWebP, isGIF, isImage } from "@/lib/imageUtils";
+import { auth, db } from "@/lib/firebase";
+import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { minifyConfig, expandConfig } from "@/lib/compression";
 import { DEFAULT_FILTERS, DEFAULT_PROJECT_CONFIG, Layer, ProjectConfig } from "@/types";
 
 const STORAGE_KEY = "obs_web_studio_last_config";
 const ID_KEY = "obs_web_studio_last_id";
-
-const isAccessColumnError = (error: unknown): boolean => {
-  if (!error || typeof error !== "object") return false;
-  const message = String((error as { message?: string }).message ?? "");
-  return message.includes("is_public") || message.includes("user_id");
-};
 
 const normalizeProjectConfig = (
   raw: unknown,
@@ -52,97 +46,80 @@ export function useStorage(
   setIsLoading: (loading: boolean) => void
 ) {
   const saveConfig = useCallback(async () => {
-    // LocalStorage için de minify edebiliriz ama debug kolaylığı için şimdilik tam tutalım
-    // veya tutarlılık için minify edelim. ExpandConfig her ikisini de (minified/full) okuyabilir.
-    // Karar: LocalStorage'ı da minify edelim, alan kazancı sağlar.
     const minified = minifyConfig(config);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(minified));
 
     if (projectId) localStorage.setItem(ID_KEY, projectId);
 
-    const { data: authData } = await supabase.auth.getUser();
-    const userId = authData.user?.id;
+    const userId = auth.currentUser?.uid;
 
     if (!userId) {
       console.warn("User not logged in, saving locally only");
       return;
     }
 
-    // Prevent saving empty projects
     if (config.layers.length === 0) {
       return;
     }
 
-    // Cloud için Minify
-    // const configToSave = minifyConfig(config); // Zaten yukarıda yaptık 'minified'
-
-    // New Project or Fork: Create new record
     if (!projectId) {
       const newId = nanoid(10);
       const now = new Date().toISOString();
-      // config nesnesi içine lastModified ekleyelim
       const configWithDate = { ...config, lastModified: now };
       const minifiedToSave = minifyConfig(configWithDate);
 
-      const { error } = await supabase.from("scenes").insert([
-        {
-          id: newId,
+      try {
+        await setDoc(doc(db, "scenes", newId), {
           user_id: userId,
           is_public: config.isPublic,
           config: minifiedToSave,
           created_at: now,
           updated_at: now,
-        },
-      ]);
+        });
 
-      if (error) {
+        setProjectId(newId);
+        setConfig(configWithDate);
+        localStorage.setItem(ID_KEY, newId);
+
+        const currentUrl = new URL(window.location.href);
+        currentUrl.searchParams.set("id", newId);
+        currentUrl.searchParams.delete("new");
+        window.history.replaceState({}, "", currentUrl.toString());
+
+        toast.success("Yeni proje olusturuldu");
+      } catch (error) {
         console.error("Cloud create failed:", error);
         toast.error("Proje olusturulamadi");
-        return;
       }
-
-      setProjectId(newId);
-      setConfig(configWithDate);
-      localStorage.setItem(ID_KEY, newId);
-
-      // Update URL without reload
-      const currentUrl = new URL(window.location.href);
-      currentUrl.searchParams.set("id", newId);
-      currentUrl.searchParams.delete("new"); // Remove 'new' param if exists
-      window.history.replaceState({}, "", currentUrl.toString());
-
-      toast.success("Yeni proje olusturuldu");
       return;
     }
 
-    // Existing Project: Update
     const now = new Date().toISOString();
-
-    // Config'i güncellemeden önce lastModified'i güncelle
     const configToSave = { ...config, lastModified: now };
     const minifiedToUpdate = minifyConfig(configToSave);
 
-    let { error } = await supabase
-      .from("scenes")
-      .update({
-        config: minifiedToUpdate,
-        is_public: config.isPublic,
-        updated_at: now,
-      })
-      .eq("id", projectId)
-      .eq("user_id", userId); // Ensure ownership
+    try {
+      const sceneRef = doc(db, "scenes", projectId);
+      const snap = await getDoc(sceneRef);
 
-    // Handle legacy schema or RLS errors if necessary
-    if (error) {
+      if (snap.exists() && snap.data().user_id === userId) {
+        await updateDoc(sceneRef, {
+          config: minifiedToUpdate,
+          is_public: config.isPublic,
+          updated_at: now,
+        });
+      } else {
+        console.error("Cloud save failed: ownership mismatch or doc not found");
+        toast.error("Kaydetme basarisiz. Yetkiniz olmayabilir.");
+      }
+    } catch (error) {
       console.error("Cloud save failed:", error);
-      toast.error("Kaydetme basarisiz. Yetkiniz olmayabilir.");
+      toast.error("Kaydetme basarisiz.");
     }
-    // NOT: setConfig burada ÇAĞRILMAMALI - kullanıcının değişikliklerini geri alır
   }, [config, projectId]);
 
   const loadConfig = useCallback(
     async (targetId?: string) => {
-      // If targetId is explicitly false (e.g. from new project flow), reset
       if (targetId === "") {
         setProjectId(null);
         setConfig(DEFAULT_PROJECT_CONFIG);
@@ -154,10 +131,8 @@ export function useStorage(
       const idToLoad = targetId || projectId || localStorage.getItem(ID_KEY);
 
       if (!idToLoad) {
-        // No ID to load, just reset to default
         setProjectId(null);
 
-        // LocalStorage'dan son config'i çekmeyi deneyelim (Session Restore)
         const saved = localStorage.getItem(STORAGE_KEY);
         if (saved) {
           try {
@@ -179,32 +154,20 @@ export function useStorage(
       setIsLoading(true);
 
       try {
-        const { data: authData } = await supabase.auth.getUser();
-        const currentUserId = authData.user?.id;
+        const currentUserId = auth.currentUser?.uid;
+        const sceneRef = doc(db, "scenes", idToLoad);
+        const snap = await getDoc(sceneRef);
 
-        let { data, error } = await supabase
-          .from("scenes")
-          .select("config, is_public, user_id")
-          .eq("id", idToLoad)
-          .single();
-
-        if (error && isAccessColumnError(error)) {
-          // ... legacy fallback omitted
-          console.error("Legacy schema not supported in this update");
-        }
-
-        if (data && !error) {
-          // Gelen veri minified olabilir, expand et
+        if (snap.exists()) {
+          const data = snap.data();
           const expandedConfig = expandConfig(data.config);
 
           setConfig(normalizeProjectConfig(expandedConfig, data.is_public ?? undefined));
 
-          // Check ownership
           if (currentUserId && data.user_id === currentUserId) {
             setProjectId(idToLoad);
             localStorage.setItem(ID_KEY, idToLoad);
           } else {
-            // Fork mode: Load data but clear ID
             setProjectId(null);
             localStorage.removeItem(ID_KEY);
             toast.info("Bu proje salt okunur. Degisiklikler yeni bir proje olarak kaydedilecek.");
@@ -212,7 +175,6 @@ export function useStorage(
           return;
         }
 
-        // If load fails, default
         setConfig(DEFAULT_PROJECT_CONFIG);
         setProjectId(null);
       } catch (error) {
@@ -227,10 +189,9 @@ export function useStorage(
 
   const shareProject = async (isPublic: boolean): Promise<string | null> => {
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser();
-      const userId = authData.user?.id;
+      const userId = auth.currentUser?.uid;
 
-      if (authError || !userId) {
+      if (!userId) {
         toast.error("Paylasim icin giris yapmalisiniz");
         return null;
       }
@@ -246,66 +207,55 @@ export function useStorage(
 
       const minifiedConfig = minifyConfig(updatedConfig);
 
-      const legacyConfig = { ...(updatedConfig as any), ownerId: userId }; // Legacy support if needed, likely irrelevant for minified
-
       if (projectId) {
         const now = new Date().toISOString();
-        let { error } = await supabase
-          .from("scenes")
-          .update({
+
+        try {
+          await updateDoc(doc(db, "scenes", projectId), {
             config: minifiedConfig,
             is_public: isPublic,
             updated_at: now,
-          })
-          .eq("id", projectId);
+          });
 
-        if (error && isAccessColumnError(error)) {
-          // Legacy fallback removed/simplified
-        }
+          setConfig(updatedConfig);
+          localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
+          localStorage.setItem(ID_KEY, projectId);
 
-        if (error) {
+          return `${window.location.origin}${window.location.pathname}#/?id=${projectId}`;
+        } catch (error) {
           console.error("Share error:", error);
           toast.error("Paylasim linki guncellenemedi");
           return null;
         }
-
-        setConfig(updatedConfig);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
-        localStorage.setItem(ID_KEY, projectId);
-
-        return `${window.location.origin}${window.location.pathname}#/?id=${projectId}`;
       }
 
       const newId = nanoid(10);
       const now = new Date().toISOString();
 
-      let { error } = await supabase.from("scenes").insert([
-        {
-          id: newId,
+      try {
+        await setDoc(doc(db, "scenes", newId), {
           user_id: userId,
           is_public: isPublic,
           config: minifiedConfig,
           created_at: now,
           updated_at: now,
-        },
-      ]);
+        });
 
-      if (error) {
+        setProjectId(newId);
+        setConfig(updatedConfig);
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
+        localStorage.setItem(ID_KEY, newId);
+
+        const currentUrl = new URL(window.location.href);
+        currentUrl.hash = `/?id=${newId}`;
+        window.location.href = currentUrl.toString();
+
+        return `${window.location.origin}${window.location.pathname}#/?id=${newId}`;
+      } catch (error) {
         console.error("Share error:", error);
         toast.error("Paylasim linki olusturulamadi");
         return null;
       }
-
-      setProjectId(newId);
-      setConfig(updatedConfig);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(minifiedConfig));
-      localStorage.setItem(ID_KEY, newId);
-
-      const currentUrl = new URL(window.location.href);
-      currentUrl.hash = `/?id=${newId}`;
-      window.location.href = currentUrl.toString();
-
-      return `${window.location.origin}${window.location.pathname}#/?id=${newId}`;
     } catch (error) {
       console.error("Share exception:", error);
       toast.error("Bir hata olustu");
@@ -319,4 +269,3 @@ export function useStorage(
     shareProject,
   };
 }
-
