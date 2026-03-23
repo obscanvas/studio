@@ -247,8 +247,8 @@ export function useStorage(
         localStorage.setItem(ID_KEY, newId);
 
         const currentUrl = new URL(window.location.href);
-        currentUrl.hash = `/?id=${newId}`;
-        window.location.href = currentUrl.toString();
+        currentUrl.hash = `/config?id=${newId}`;
+        window.history.replaceState({}, "", currentUrl.toString());
 
         return `${window.location.origin}${window.location.pathname}#/?id=${newId}`;
       } catch (error) {
